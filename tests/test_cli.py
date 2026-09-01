@@ -447,3 +447,33 @@ def test_config_edit_updates_existing_values(tmp_path, capsys):
     assert str(cfg.gateway) == "10.0.0.1"
     assert set(cfg.vendors) == {"hikvision", "dahua"}
     assert "Configuration modifiée" in capsys.readouterr().out
+
+
+def test_config_edit_without_say_uses_print(tmp_path, capsys):
+    """Régression : `--config-edit` doit fonctionner quand `say` n'est pas injecté
+    (appel réel depuis main()), faute de quoi TypeError: 'NoneType' object is not callable."""
+    from ipcam_provisioner.wizard import WizardAnswers, starter_yaml
+
+    initial = WizardAnswers(
+        site_name="Site A",
+        ip_range_start="192.168.1.10",
+        ip_range_end="192.168.1.250",
+        subnet_mask="255.255.255.0",
+        gateway="192.168.1.1",
+        vendor_types=["hikvision"],
+    )
+    dest = tmp_path / "site.yaml"
+    dest.write_text(starter_yaml(initial), encoding="utf-8")
+
+    # `say` n'est volontairement pas fourni → défaut à print (aucun crash).
+    # Tous les champs gardés par Entrée ("").
+    replies = iter(["", "", "", "", "", ""])
+    rc = cli._run_config_edit(
+        str(dest),
+        ask=lambda _l, _d: next(replies),
+        ask_password=lambda _l: "",
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Édition de la configuration" in out
+    assert "Configuration modifiée" in out

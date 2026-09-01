@@ -229,6 +229,9 @@ def _run_config_edit(path_str: str, ask=None, ask_password=None, say=None) -> in
         wizard_answers_from_config,
     )
 
+    if say is None:
+        say = print
+
     path = Path(path_str)
     if not path.exists():
         print(f"le fichier n'existe pas : {path}", file=sys.stderr)
