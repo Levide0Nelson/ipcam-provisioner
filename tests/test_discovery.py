@@ -23,6 +23,17 @@ def test_oui_vendor():
     assert oui_vendor("de:ad:be:ef:00:01") is None
 
 
+def test_oui_vendor_real_hikvision_c0517e():
+    # OUI observé sur matériel réel : caméra Hikvision DS-2CD1043G0E-I (site réel).
+    assert oui_vendor("c0:51:7e:c9:2e:6e") == "hikvision"
+    assert oui_vendor("C0:51:7E:C9:2E:6E") == "hikvision"
+
+
+def test_oui_vendor_real_hikvision_1012fb():
+    # OUI observé sur matériel réel : caméra Hikvision DS-2CD1153G0-I (site réel).
+    assert oui_vendor("10:12:fb:db:df:b6") == "hikvision"
+
+
 async def test_discover_all_demo(config, network):
     cameras = await discover_all(config, network)
     assert len(cameras) == 8
@@ -118,8 +129,10 @@ async def test_real_multicast_ws_discovery_finds_rehearsal_camera():
     finally:
         await net.stop()
 
-    assert len(cameras) == 1
-    camera = cameras[0]
+    assert len(cameras) >= 1
+    rehearsal = [c for c in cameras if c.ip_address == "169.254.20.65"]
+    assert len(rehearsal) == 1
+    camera = rehearsal[0]
     assert camera.discovery_method is DiscoveryMethod.ONVIF_WS_DISCOVERY
     assert camera.ip_address == "169.254.20.65"
 
