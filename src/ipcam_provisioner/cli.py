@@ -185,13 +185,15 @@ def _run_init(dest: str, source_config: str) -> int:
     return 0
 
 
-def _run_wizard(dest: str) -> int:
+def _run_wizard(dest: str, ask=None, ask_password=None, say=None) -> int:
     """Phase 5 — --wizard : assistant interactif de configuration."""
     from .config import ConfigError as CfgErr
     from .wizard import answers_to_config, collect_answers, starter_yaml
 
+    if say is None:
+        say = print
     try:
-        answers = collect_answers()
+        answers = collect_answers(ask=ask, ask_password=ask_password, say=say)
         cfg = answers_to_config(answers)  # valide avant écriture
     except CfgErr as exc:
         print(f"\nerreur : {exc}", file=sys.stderr)
@@ -208,13 +210,13 @@ def _run_wizard(dest: str) -> int:
         print(f"impossible d'écrire {path} : {exc}", file=sys.stderr)
         return 2
 
-    print()
-    print(f"Configuration écrite : {path}")
-    print(f"  Site        : {cfg.site_name}")
-    print(f"  Plage       : {cfg.ip_range.start} - {cfg.ip_range.end}")
-    print(f"  Masque      : {cfg.subnet_mask}")
-    print(f"  Passerelle  : {cfg.gateway}")
-    print(f"  Vendors     : {', '.join(cfg.vendors)}")
+    say()
+    say(f"Configuration écrite : {path}")
+    say(f"  Site        : {cfg.site_name}")
+    say(f"  Plage       : {cfg.ip_range.start} - {cfg.ip_range.end}")
+    say(f"  Masque      : {cfg.subnet_mask}")
+    say(f"  Passerelle  : {cfg.gateway}")
+    say(f"  Vendors     : {', '.join(cfg.vendors)}")
     return 0
 
 
@@ -291,9 +293,8 @@ def _run_config_delete(path_str: str, ask=None, say=None) -> int:
 MENU_ITEMS = [
     ("1", "Lancer le pipeline réel sur la configuration (--config)"),
     ("2", "Simuler sans matériel (site de démonstration Phase 1)"),
-    ("3", "Gérer les fichiers de configuration (wizard / édition / suppression / init)"),
-    ("4", "Générer un fichier de config de départ (--init)"),
-    ("5", "Répétition locale d'une méthode de découverte (Phase 2)"),
+    ("3", "Gérer les fichiers de configuration (créer / modifier / supprimer / générer)"),
+    ("4", "Répétition locale d'une méthode de découverte (Phase 2)"),
     ("0", "Quitter"),
 ]
 
@@ -343,24 +344,56 @@ _CONFIG_MENU_ITEMS = [
 ]
 
 
-def _run_config_menu(config_path: str, ask, say) -> None:
-    """Sous-menu de gestion des fichiers de configuration (option 3 du menu principal)."""
+def _ask_path(ask, label: str, default: str = "") -> str:
+    """Demande un chemin de fichier via `ask(label_nu, default)`. Taper Entrée retourne
+    `default` (si non vide). Le prompt (avec `[défaut] :`) est formaté par le callable."""
+    raw = (ask(label, default) or "").strip()
+    return raw or default
+
+
+def _run_config_menu(config_path: str, ask=None, ask_password=None, say=None) -> None:
+    """Sous-menu de gestion des fichiers de configuration (option 3 du menu principal).
+
+    `ask(label, default)` à 2 arguments lit les saisies visibles (il formate lui-même
+    le prompt `label [défaut] :`), `ask_password(label)` les saisies masquées, `say`
+    affiche. Chaque action demande le chemin du fichier concerné : l'utilisateur choisit
+    donc librement le fichier à créer / modifier / supprimer.
+    """
+    if ask is None:
+        ask = lambda label, default: input(f"{label} [{default}] : " if default else f"{label} : ")  # noqa: E731
+    if ask_password is None:
+        import getpass
+
+        ask_password = lambda label: getpass.getpass(f"{label} (saisie masquée) : ")  # noqa: E731
+    if say is None:
+        say = print
+    ask_delete = lambda label: ask(label, "")  # noqa: E731
     while True:
         say("\n  Gestion de la configuration :")
         for code, label in _CONFIG_MENU_ITEMS:
             say(f"    {code}. {label}")
-        choice = (ask("  Votre choix : ") or "").strip()
+        choice = (ask("  Votre choix", "") or "").strip()
         if choice == "0" or choice == "":
             say("  Retour au menu principal.")
             return
         if choice == "1":
-            _run_wizard(config_path)
+            dest = _ask_path(ask, "  Chemin du nouveau fichier", "config/siteB.yaml")
+            if not dest:
+                say("  chemin requis : aucune modification effectuée.")
+                continue
+            _run_wizard(dest, ask=ask, ask_password=ask_password, say=say)
         elif choice == "2":
-            _run_config_edit(config_path, ask=ask, say=say)
+            dest = _ask_path(ask, "  Fichier à modifier", config_path)
+            _run_config_edit(dest, ask=ask, ask_password=ask_password, say=say)
         elif choice == "3":
-            _run_config_delete(config_path, ask=ask, say=say)
+            dest = _ask_path(ask, "  Fichier à supprimer", config_path)
+            _run_config_delete(dest, ask=ask_delete, say=say)
         elif choice == "4":
-            _run_init(config_path, config_path)
+            dest = _ask_path(ask, "  Fichier à générer", "config/example_site.yaml")
+            if not dest:
+                say("  chemin requis : aucune modification effectuée.")
+                continue
+            _run_init(dest, config_path)
         else:
             say(f"  choix invalide : {choice!r}")
 
@@ -390,10 +423,17 @@ def _run_menu(config_path: str, ask=None, say=None, json_path: str | None = None
         elif choice == "2":
             _run_simulated(json_path=json_path)
         elif choice == "3":
-            _run_config_menu(config_path, ask, say)
+            # Le sous-menu de config attend `ask(label, default)` à 2 args ; l'`ask`
+            # du menu (1 arg, `input(label)`) requiert le prompt formaté complet, donc
+            # on intègre le `[défaut]` et le séparateur ici.
+            _run_config_menu(
+                config_path,
+                ask=lambda label, default: ask(  # noqa: E731
+                    f"{label} [{default}] : " if default else f"{label} : "
+                ),
+                say=say,
+            )
         elif choice == "4":
-            _run_init(config_path, config_path)
-        elif choice == "5":
             method = _pick_rehearse_method(ask, say)
             if method is None:
                 say("  Retour au menu principal.")

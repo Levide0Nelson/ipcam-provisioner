@@ -295,32 +295,37 @@ def test_menu_simulate_action_dispatches(capsys, monkeypatch):
 
 def test_menu_dispatches_config_wizard(capsys, tmp_path, monkeypatch):
     dest = tmp_path / "menu_wiz.yaml"
-    # option 3 (gestion config) → 2 (modifier) → 0 (retour) → 0 (quitter)
-    answers = iter(["3", "2", "0", "0"])
+    # option 3 (gestion config) → 2 (modifier) → chemin → 0 (retour) → 0 (quitter)
+    answers = iter(["3", "2", "config/siteA.yaml", "0", "0"])
     calls = []
 
-    def fake_edit(path, ask, say):
+    def fake_edit(path, ask, ask_password, say):
         calls.append(("edit", path))
 
     monkeypatch.setattr(cli, "_run_config_edit", fake_edit)
     rc = cli._run_menu(str(dest), ask=lambda _: next(answers))
     assert rc == 0
-    assert calls == [("edit", str(dest))]
+    assert calls == [("edit", "config/siteA.yaml")]
 
 
 def test_config_menu_creates_edit_deletes_inits(capsys, monkeypatch, tmp_path):
     dest = tmp_path / "menu_cfg.yaml"
-    # sous-menu : 1 (créer) → 4 (init) → 3 (supprimer) → 0 (retour)
-    answers = iter(["1", "4", "3", "0"])
+    # sous-menu : 1 (créer) → chemin, 4 (init) → chemin, 3 (supprimer) → chemin, 0
+    answers = iter(["1", "", "4", "", "3", "", "0"])
     seen = []
 
-    monkeypatch.setattr(cli, "_run_wizard", lambda path: seen.append(("wizard", path)))
+    monkeypatch.setattr(cli, "_run_wizard", lambda path, **k: seen.append(("wizard", path)))
     monkeypatch.setattr(cli, "_run_init", lambda dest, src: seen.append(("init", dest)))
-    monkeypatch.setattr(cli, "_run_config_delete", lambda *a, **k: seen.append(("delete",)))
+    monkeypatch.setattr(
+        cli, "_run_config_delete", lambda *a, **k: seen.append(("delete",))
+    )
 
-    cli._run_config_menu(str(dest), ask=lambda _: next(answers), say=lambda *_: None)
+    cli._run_config_menu(
+        str(dest), ask=lambda _l, _d: next(answers), say=lambda *_: None
+    )
     assert [s[0] for s in seen] == ["wizard", "init", "delete"]
-    assert seen[0][1] == str(dest)
+    assert seen[0][1] == "config/siteB.yaml"
+    assert "config" in seen[1][1]
 
 
 def test_pick_rehearse_method_by_number():
@@ -339,9 +344,9 @@ def test_pick_rehearse_method_zero_returns_none():
 def test_menu_rehearse_uses_submenu_then_loops(capsys, monkeypatch):
     from ipcam_provisioner.models import DiscoveryMethod
 
-    # option 5, puis méthode 1 (ONVIF), puis quitter
+    # option 4, puis méthode 1 (ONVIF), puis quitter
     calls = {"rehearsed": None}
-    answers = iter(["5", "1", "0"])
+    answers = iter(["4", "1", "0"])
 
     def fake_rehearse(method):
         calls["rehearsed"] = method
