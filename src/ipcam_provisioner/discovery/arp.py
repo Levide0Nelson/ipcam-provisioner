@@ -22,13 +22,36 @@ from .base import DiscoveryAdapter, DiscoveryContext
 
 logger = logging.getLogger("ipcam_provisioner.discovery.arp")
 
-#: Table OUI partielle (Phase 1) — à étendre en Phase 2 avec les OUIs observés.
+#: Table OUI caméras (Phase 1 → enrichie en Phase 2 avec les OUIs observés sur
+#: matériel réel, ex. `c0:51:7e` : Hikvision DS-2CD1043G0E-I du site réel).
 OUI_TABLE: dict[str, str] = {
+    # Hikvision
     "ac:cc:8e": "hikvision",
     "44:19:b6": "hikvision",
+    "c0:51:7e": "hikvision",
+    "10:12:fb": "hikvision",
+    "c0:56:e3": "hikvision",
+    "bc:ad:28": "hikvision",
+    "c4:2f:90": "hikvision",
+    "18:68:cb": "hikvision",
+    "28:57:be": "hikvision",
+    "4c:bd:8f": "hikvision",
+    "54:c4:15": "hikvision",
+    "64:db:8b": "hikvision",
+    "94:e1:ac": "hikvision",
+    "a4:14:37": "hikvision",
+    "b4:a3:82": "hikvision",
+    # Dahua / Zhejiang Dahua
     "e0:50:8b": "dahua",
-    "b4:cd:27": "dahua",
+    "3c:ef:8c": "dahua",
+    "4c:11:bf": "dahua",
+    "90:02:a9": "dahua",
+    "bc:32:5f": "dahua",
+    "14:a7:8b": "dahua",
+    # Tiandy / Tianjin Tiandy
     "00:cc:2f": "tiandy",
+    "3c:da:6d": "tiandy",
+    # Generic / divers
     "aa:bb:cc": "generic",
     "08:3a:f2": "generic",
 }
