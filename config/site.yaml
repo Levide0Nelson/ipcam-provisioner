@@ -1,0 +1,18 @@
+site_name: "Site A"
+ip_range:
+  start: 192.168.1.10
+  end: 192.168.1.250
+subnet_mask: 255.255.255.0
+gateway: 192.168.1.1
+vendors:
+  hikvision:
+    default_password: "REPLACE_ME"
+  dahua:
+    default_password: "REPLACE_ME"
+  tiandy:
+    default_password: "REPLACE_ME"
+concurrency:
+  max_parallel_requests: 50
+discovery:
+  timeout_seconds: 5
+  methods: [sadp, dahua_discovery, tiandy_discovery, onvif_ws_discovery, arp_oui_fallback]

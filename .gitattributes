@@ -1,0 +1,15 @@
+# Normalise les fins de ligne 
+* text=auto
+
+# Garde les fichiers texte en LF
+*.py text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.txt text eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
