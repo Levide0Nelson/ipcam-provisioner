@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import datetime
 
 from .activation import ActivationEngine
@@ -54,8 +55,15 @@ async def run(
     *,
     sim_network=None,
     talker: HttpTalker | None = None,
+    confirm_write: Callable[[Camera], bool] | None = None,
 ) -> AssignmentResult:
-    """Exécute le pipeline complet pour un site et retourne le rapport de synthèse."""
+    """Exécute le pipeline complet pour un site et retourne le rapport de synthèse.
+
+    `confirm_write` est un callback appelé avant chaque opération réseau qui *écrit*
+    (activation d'une caméra inactive, attribution d'une nouvelle IP). S'il renvoie
+    False, la caméra est sautée : activation -> `manual_required`, attribution ->
+    laissée en l'état (non modifiée). `None` = tout autoriser (comportement par défaut).
+    """
     result = AssignmentResult(site_name=config.site_name)
     own_talker = talker is None
     if talker is None:
@@ -63,6 +71,11 @@ async def run(
         talker = HttpTalker(resolver, timeout=config.discovery.timeout_seconds)
     announcer: Layer2Announcer = sim_network if sim_network is not None else _NullAnnouncer()
     sem = asyncio.Semaphore(config.concurrency.max_parallel_requests)
+
+    async def writes_approved(camera: Camera) -> bool:
+        if confirm_write is None:
+            return True
+        return confirm_write(camera)
 
     async def run_with_steer(camera: Camera, operation) -> None:
         """Annonce l'IP/MAC au niveau L2 (pour joindre le bon appareil) puis opère."""
@@ -114,9 +127,16 @@ async def run(
         )
 
         # --- 3. Activation des caméras inactives / en config usine ----------
+        activation_pending = [c for c in cameras if c.last_error is None]
+        to_activate: list[Camera] = []
+        for camera in activation_pending:
+            if await writes_approved(camera):
+                to_activate.append(camera)
+            elif camera.activation_status is not ActivationStatus.ACTIVE:
+                camera.activation_result = ActivationResult.MANUAL_REQUIRED
         activation = ActivationEngine(talker, config)
         await bounded(
-            [c for c in cameras if c.last_error is None],
+            to_activate,
             activation.activate,
         )
 
@@ -190,7 +210,7 @@ async def run(
         # --- 7. Attribution finale (unicast, IP désormais uniques) ----------
         assignment = AssignmentEngine(talker, config)
         await bounded(
-            [c for c in cameras if c.last_error is None],
+            [c for c in cameras if c.last_error is None and await writes_approved(c)],
             assignment.assign,
         )
 
