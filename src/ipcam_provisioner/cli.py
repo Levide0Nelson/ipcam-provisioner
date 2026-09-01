@@ -291,7 +291,7 @@ def _run_config_delete(path_str: str, ask=None, say=None) -> int:
 MENU_ITEMS = [
     ("1", "Lancer le pipeline réel sur la configuration (--config)"),
     ("2", "Simuler sans matériel (site de démonstration Phase 1)"),
-    ("3", "Créer/configurer un site (--wizard)"),
+    ("3", "Gérer les fichiers de configuration (wizard / édition / suppression / init)"),
     ("4", "Générer un fichier de config de départ (--init)"),
     ("5", "Répétition locale d'une méthode de découverte (Phase 2)"),
     ("0", "Quitter"),
@@ -334,6 +334,37 @@ def _pick_rehearse_method(ask, say) -> DiscoveryMethod | None:
         say(f"    numéro hors plage : {index}")
 
 
+_CONFIG_MENU_ITEMS = [
+    ("1", "Créer un nouveau site (--wizard)"),
+    ("2", "Modifier une configuration existante (--config-edit)"),
+    ("3", "Supprimer une configuration existante (--config-delete)"),
+    ("4", "Générer un fichier de config de départ (--init)"),
+    ("0", "Retour au menu principal"),
+]
+
+
+def _run_config_menu(config_path: str, ask, say) -> None:
+    """Sous-menu de gestion des fichiers de configuration (option 3 du menu principal)."""
+    while True:
+        say("\n  Gestion de la configuration :")
+        for code, label in _CONFIG_MENU_ITEMS:
+            say(f"    {code}. {label}")
+        choice = (ask("  Votre choix : ") or "").strip()
+        if choice == "0" or choice == "":
+            say("  Retour au menu principal.")
+            return
+        if choice == "1":
+            _run_wizard(config_path)
+        elif choice == "2":
+            _run_config_edit(config_path, ask=ask, say=say)
+        elif choice == "3":
+            _run_config_delete(config_path, ask=ask, say=say)
+        elif choice == "4":
+            _run_init(config_path, config_path)
+        else:
+            say(f"  choix invalide : {choice!r}")
+
+
 def _run_menu(config_path: str, ask=None, say=None, json_path: str | None = None) -> int:
     """Phase 5 — menu interactif principal : sélectionne et exécute une action."""
     if ask is None:
@@ -359,7 +390,7 @@ def _run_menu(config_path: str, ask=None, say=None, json_path: str | None = None
         elif choice == "2":
             _run_simulated(json_path=json_path)
         elif choice == "3":
-            _run_wizard(config_path)
+            _run_config_menu(config_path, ask, say)
         elif choice == "4":
             _run_init(config_path, config_path)
         elif choice == "5":
