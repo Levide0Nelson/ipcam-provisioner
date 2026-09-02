@@ -7,6 +7,12 @@ découverte → fingerprinting → activation → détection des conflits → r�
 Toute opération réseau par appareil est bornée par la sémaphore de concurrence ;
 un échec sur une caméra pose `last_error` + `assignment_status=FAILED` et ne sort
 jamais de la boucle (isolation par caméra).
+
+Modes de fonctionnement (modules de clarification) :
+- DISCOVER  : lecture seule (découverte + identification). Aucune écriture réseau.
+- ASSIGN    : découverte + attribution IP (caméras actives uniquement). Les caméras
+              inactives sont marquées MANUAL_REQUIRED avec notification.
+- ACTIVATE_ASSIGN : pipeline complet (activation + attribution). Comportement initial.
 """
 
 from __future__ import annotations
@@ -30,6 +36,7 @@ from .models import (
     Camera,
     Conflict,
     ResolutionStatus,
+    RunMode,
 )
 from .net import HttpTalker, NetworkResolver
 from .planning import PlanningError, plan_target_ips
@@ -57,8 +64,19 @@ async def run(
     sim_network=None,
     talker: HttpTalker | None = None,
     confirm_write: Callable[[Camera], bool] | None = None,
+    mode: RunMode = RunMode.ACTIVATE_ASSIGN,
+    ask_credentials: Callable[[str], tuple[str, str] | None] | None = None,
 ) -> AssignmentResult:
     """Exécute le pipeline complet pour un site et retourne le rapport de synthèse.
+
+    `mode` contrôle les étapes exécutées :
+    - DISCOVER  : lecture seule (aucune écriture réseau).
+    - ASSIGN    : découverte + attribution IP (sans activation préalable).
+    - ACTIVATE_ASSIGN : pipeline complet (activation + attribution).
+
+    `ask_credentials` est un callback optionnel appelé par le vendeur (hikvision,
+    dahua...) pour obtenir des identifiants interactifs (username, password). Si None,
+    les identifiants par défaut de la configuration sont utilisés.
 
     `confirm_write` est un callback appelé avant chaque opération réseau qui *écrit*
     (activation d'une caméra inactive, attribution d'une nouvelle IP). S'il renvoie
@@ -66,12 +84,26 @@ async def run(
     laissée en l'état (non modifiée). `None` = tout autoriser (comportement par défaut).
     """
     result = AssignmentResult(site_name=config.site_name)
+    result.run_mode = mode.value
     own_talker = talker is None
     if talker is None:
         resolver = sim_network if sim_network is not None else NetworkResolver()
         talker = HttpTalker(resolver, timeout=config.discovery.timeout_seconds)
     announcer: Layer2Announcer = sim_network if sim_network is not None else _NullAnnouncer()
     sem = asyncio.Semaphore(config.concurrency.max_parallel_requests)
+
+    # Construction du resolveur de mots de passe
+    credential_cache: dict[str, tuple[str, str]] = {}
+
+    def _resolve_password(vendor: str) -> str:
+        if vendor in credential_cache:
+            return credential_cache[vendor][1]
+        if ask_credentials is not None:
+            creds = ask_credentials(vendor)
+            if creds is not None:
+                credential_cache[vendor] = creds
+                return creds[1]
+        return config.default_password_for(vendor)
 
     async def writes_approved(camera: Camera) -> bool:
         if confirm_write is None:
@@ -127,38 +159,49 @@ async def run(
             sum(1 for c in cameras if c.activation_status.value == "unknown"),
         )
 
-        # --- 3. Activation des caméras inactives / en config usine ----------
-        activation_pending = [c for c in cameras if c.last_error is None]
-        to_activate: list[Camera] = []
-        for camera in activation_pending:
-            if await writes_approved(camera):
-                to_activate.append(camera)
-            elif camera.activation_status is not ActivationStatus.ACTIVE:
-                camera.activation_result = ActivationResult.MANUAL_REQUIRED
-        activation = ActivationEngine(talker, config)
-        await bounded(
-            to_activate,
-            activation.activate,
-        )
+        if mode is RunMode.DISCOVER:
+            # Lecture seule : pas d'activation, pas de résolution, pas d'attribution.
+            return _finish(result)
 
-        # --- 3bis. Re-fingerprint : récupérer modèle/série/firmware après
-        # activation. Les caméras inactives (config usine) refusaient le
-        # fingerprinting (401) pendant la découverte ; une fois activées, on
-        # relit leur identité pour enrichir le rapport. Best-effort : un échec
-        # d'enrichissement ne fait pas échouer la caméra. --------------------
-        to_enrich = [
-            c
-            for c in cameras
-            if c.last_error is None
-            and c.activation_status is ActivationStatus.ACTIVE
-            and c.model is None
-        ]
-        if to_enrich:
-            await bounded(to_enrich, fingerprinting.identify)
-            logger.info(
-                "re-fingerprint : %d caméra(s) enrichie(s) après activation",
-                sum(1 for c in to_enrich if c.model is not None),
+        # --- 3. Activation des caméras inactives / en config usine ----------
+        # Uniquement en mode ACTIVATE_ASSIGN.
+        if mode is RunMode.ACTIVATE_ASSIGN:
+            activation_pending = [c for c in cameras if c.last_error is None]
+            to_activate: list[Camera] = []
+            for camera in activation_pending:
+                if await writes_approved(camera):
+                    to_activate.append(camera)
+                elif camera.activation_status is not ActivationStatus.ACTIVE:
+                    camera.activation_result = ActivationResult.MANUAL_REQUIRED
+            activation = ActivationEngine(talker, config, password_for=_resolve_password)
+            await bounded(
+                to_activate,
+                activation.activate,
             )
+
+            # --- 3bis. Re-fingerprint : récupérer modèle/série/firmware après
+            # activation. Les caméras inactives (config usine) refusaient le
+            # fingerprinting (401) pendant la découverte ; une fois activées, on
+            # relit leur identité pour enrichir le rapport. Best-effort : un échec
+            # d'enrichissement ne fait pas échouer la caméra. --------------------
+            to_enrich = [
+                c
+                for c in cameras
+                if c.last_error is None
+                and c.activation_status is ActivationStatus.ACTIVE
+                and c.model is None
+            ]
+            if to_enrich:
+                await bounded(to_enrich, fingerprinting.identify)
+                logger.info(
+                    "re-fingerprint : %d caméra(s) enrichie(s) après activation",
+                    sum(1 for c in to_enrich if c.model is not None),
+                )
+        else:
+            # Mode ASSIGN : les caméras inactives ne peuvent pas être attribuées.
+            for camera in cameras:
+                if camera.activation_status is not ActivationStatus.ACTIVE and camera.last_error is None:
+                    camera.activation_result = ActivationResult.MANUAL_REQUIRED
 
         # --- 4. Détection des conflits (caméras actives) --------------------
         addressable = [
@@ -209,7 +252,7 @@ async def run(
             return _finish(result)
 
         # --- 7. Attribution finale (unicast, IP désormais uniques) ----------
-        assignment = AssignmentEngine(talker, config)
+        assignment = AssignmentEngine(talker, config, password_for=_resolve_password)
         assignment_candidates: list[Camera] = []
         for camera in cameras:
             if camera.last_error is not None:
