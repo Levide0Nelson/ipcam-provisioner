@@ -12,6 +12,14 @@ from datetime import datetime
 from typing import Any
 
 
+class RunMode(enum.Enum):
+    """Modes de fonctionnement du pipeline (modules de clarification)."""
+
+    DISCOVER = "discover"
+    ASSIGN = "assign"
+    ACTIVATE_ASSIGN = "activate_assign"
+
+
 class DiscoveryMethod(enum.Enum):
     SADP = "sadp"
     DAHUA_DISCOVERY = "dahua_discovery"
@@ -103,6 +111,7 @@ class AssignmentResult:
     site_name: str
     started_at: datetime = field(default_factory=datetime.now)
     finished_at: datetime | None = None
+    run_mode: str = "discover"
     total_discovered: int = 0
     total_assigned: int = 0
     total_failed: int = 0
@@ -127,3 +136,17 @@ class AssignmentResult:
 def capture_timestamp() -> str:
     """Horodatage court et stable pour les logs (tout en ASCII)."""
     return _now()
+
+
+__all__ = [
+    "ActivationResult",
+    "ActivationStatus",
+    "AssignmentResult",
+    "AssignmentStatus",
+    "Camera",
+    "Conflict",
+    "DiscoveryMethod",
+    "ResolutionStatus",
+    "RunMode",
+    "capture_timestamp",
+]
