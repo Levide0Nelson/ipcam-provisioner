@@ -97,3 +97,25 @@ async def test_re_fingerprint_populates_model_after_activation(config, network):
         assert camera.model is not None, camera.mac_address
         assert camera.serial_number is not None, camera.mac_address
         assert camera.firmware_version is not None, camera.mac_address
+
+
+async def test_confirm_write_false_skips_all_writes(config, network):
+    """`confirm_write` refusant tout : aucune caméra n'est attribuée (le pipeline
+    garde tout en lecture seule) et aucune n'est modifiée sur le réseau simulé."""
+    result = await run(config, sim_network=network, confirm_write=lambda camera: False)
+    # aucune attribution réussie
+    assert result.total_assigned == 0
+    # les caméras restent sur leur IP découverte (IP usine non réassignée)
+    for camera in result.cameras:
+        assert camera.assignment_status is not AssignmentStatus.SUCCESS
+        assert camera.target_ip != camera.ip_address
+
+
+async def test_confirm_write_false_marks_manual_required(config, network):
+    """Le rejet d'écriture est visible dans le rapport : les caméras non attribuées
+    sont marquées comme nécessitant une action manuelle (pas un silence)."""
+    result = await run(config, sim_network=network, confirm_write=lambda camera: False)
+    assert result.total_manual_required == 8
+    assert all(
+        c.activation_result is ActivationResult.MANUAL_REQUIRED for c in result.cameras
+    )

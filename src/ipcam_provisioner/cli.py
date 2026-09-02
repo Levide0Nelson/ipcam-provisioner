@@ -134,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     from .orchestrator import run
 
     try:
-        result = asyncio.run(run(config))
+        result = asyncio.run(run(config, confirm_write=_ask_write_confirmation))
     except Exception as exc:  # noqa: BLE001 - échec pipeline
         print(f"échec du run : {exc}", file=sys.stderr)
         return 1
@@ -465,11 +465,33 @@ def _run_simulated(json_path: str | None = None) -> int:
     return _emit_report(result, json_path)
 
 
+def _ask_write_confirmation(camera) -> bool:
+    """Demande à l'utilisateur s'il autorise une *écriture* réseau sur cette caméra.
+
+    En non-interactif (stdin non terminal), on refuse par défaut : un script ne
+    modifie jamais le réseau sans confirmation explicite. `--config` reste donc sûr
+    en CI / dans un pipe.
+    """
+    if not sys.stdin.isatty():
+        print(
+            f"[lecture seule] pas de terminal — écriture refusée pour "
+            f"{camera.mac_address or camera.ip_address}",
+            file=sys.stderr,
+        )
+        return False
+    label = (
+        f"{camera.mac_address or camera.ip_address} ({camera.vendor or '?'}, "
+        f"{camera.model or 'modèle inconnu'})"
+    )
+    answer = input(f"⚙️  Autoriser l'écriture réseau sur {label} ? [y/N] ")
+    return answer.strip().lower() in ("y", "yes", "o", "oui")
+
+
 def _run_pipeline(config, json_path: str | None = None) -> int:
     from .orchestrator import run
 
     try:
-        result = asyncio.run(run(config))
+        result = asyncio.run(run(config, confirm_write=_ask_write_confirmation))
     except Exception as exc:  # noqa: BLE001 - échec pipeline
         print(f"échec du run : {exc}", file=sys.stderr)
         return 1

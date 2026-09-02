@@ -26,6 +26,7 @@ from .models import (
     ActivationResult,
     ActivationStatus,
     AssignmentResult,
+    AssignmentStatus,
     Camera,
     Conflict,
     ResolutionStatus,
@@ -209,10 +210,17 @@ async def run(
 
         # --- 7. Attribution finale (unicast, IP désormais uniques) ----------
         assignment = AssignmentEngine(talker, config)
-        await bounded(
-            [c for c in cameras if c.last_error is None and await writes_approved(c)],
-            assignment.assign,
-        )
+        assignment_candidates: list[Camera] = []
+        for camera in cameras:
+            if camera.last_error is not None:
+                continue
+            if await writes_approved(camera):
+                assignment_candidates.append(camera)
+            elif camera.assignment_status is not AssignmentStatus.SUCCESS:
+                # Non confirmée par l'utilisateur : pas d'écriture réseau. Elle reste
+                # à traiter manuellement (visible dans le rapport), non modifiée.
+                camera.activation_result = ActivationResult.MANUAL_REQUIRED
+        await bounded(assignment_candidates, assignment.assign)
 
     except Exception as exc:  # noqa: BLE001 - erreur au niveau pipeline
         result.errors.append(f"échec pipeline : {exc}")
