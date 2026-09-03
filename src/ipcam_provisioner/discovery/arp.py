@@ -54,6 +54,10 @@ OUI_TABLE: dict[str, str] = {
     # Generic / divers
     "aa:bb:cc": "generic",
     "08:3a:f2": "generic",
+    # Parc réel (site 192.168.x) : clones génériques serveur `uc-httpd` (xmsecu / DVRIP 34567)
+    "00:12:31": "xmsecu",
+    "00:12:17": "xmsecu",
+    "f4:5b:73": "xmsecu",
 }
 
 _IPV4_RE = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
