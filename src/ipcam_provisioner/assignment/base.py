@@ -11,6 +11,8 @@ from ..models import ActivationResult, ActivationStatus, AssignmentStatus, Camer
 from ..net import HttpTalker
 from ..onvif_soap import build_set_network_request
 from ..retry import call_with_retry
+from .errors import AssignmentError
+from .xmsecu import assign_xmsecu
 
 logger = logging.getLogger("ipcam_provisioner.assignment")
 
@@ -20,17 +22,19 @@ DAHUA_NET_PATH = "/cgi-bin/configManager.cgi"
 TIANDY_NET_PATH = "/device/network"
 ONVIF_NET_PATH = "/onvif/device_service"
 
-Assigner = Callable[[Camera, HttpTalker, object], Awaitable[None]]
-
-
-class AssignmentError(RuntimeError):
-    """Échec définitif de l'attribution d'une caméra (HTTP ou protocole)."""
+Assigner = Callable[[Camera, HttpTalker, object, Callable[[str], str]], Awaitable[None]]
 
 
 class AssignmentEngine:
-    def __init__(self, talker: HttpTalker, config) -> None:
+    def __init__(
+        self,
+        talker: HttpTalker,
+        config,
+        password_for: Callable[[str], str] | None = None,
+    ) -> None:
         self._talker = talker
         self._config = config
+        self._password_for = password_for or config.default_password_for
 
     async def assign(self, camera: Camera) -> Camera:
         if camera.last_error is not None:
@@ -58,7 +62,7 @@ class AssignmentEngine:
         assigner = ASSIGNERS[camera.vendor]
 
         async def attempt() -> None:
-            await assigner(camera, self._talker, self._config)
+            await assigner(camera, self._talker, self._config, self._password_for)
 
         try:
             await call_with_retry(
@@ -81,8 +85,8 @@ class AssignmentEngine:
 # ---------------------------------------------------------------------------
 
 
-async def _assign_hikvision(camera: Camera, talker: HttpTalker, config) -> None:
-    password = config.default_password_for("hikvision")
+async def _assign_hikvision(camera: Camera, talker: HttpTalker, config, password_for: Callable[[str], str]) -> None:
+    password = password_for("hikvision")
     body = (
         '<NetworkInterface xmlns="http://www.hikvision.com/ver10/XMLSchema">'
         "<id>1</id>"
@@ -104,8 +108,8 @@ async def _assign_hikvision(camera: Camera, talker: HttpTalker, config) -> None:
         raise AssignmentError(f"Hikvision refuse la configuration réseau (HTTP {response.status_code})")
 
 
-async def _assign_dahua(camera: Camera, talker: HttpTalker, config) -> None:
-    password = config.default_password_for("dahua")
+async def _assign_dahua(camera: Camera, talker: HttpTalker, config, password_for: Callable[[str], str]) -> None:
+    password = password_for("dahua")
     params = {
         "action": "setConfig",
         "Network.eth0.address": camera.target_ip or "",
@@ -122,8 +126,8 @@ async def _assign_dahua(camera: Camera, talker: HttpTalker, config) -> None:
         raise AssignmentError(f"Dahua refuse la configuration réseau (HTTP {response.status_code})")
 
 
-async def _assign_tiandy(camera: Camera, talker: HttpTalker, config) -> None:
-    password = config.default_password_for("tiandy")
+async def _assign_tiandy(camera: Camera, talker: HttpTalker, config, password_for: Callable[[str], str]) -> None:
+    password = password_for("tiandy")
     body = json.dumps(
         {"ip": camera.target_ip, "mask": str(config.subnet_mask), "gateway": str(config.gateway)}
     ).encode("utf-8")
@@ -138,8 +142,8 @@ async def _assign_tiandy(camera: Camera, talker: HttpTalker, config) -> None:
         raise AssignmentError(f"Tiandy refuse la configuration réseau (HTTP {response.status_code})")
 
 
-async def _assign_onvif(camera: Camera, talker: HttpTalker, config) -> None:
-    password = config.default_password_for("onvif")
+async def _assign_onvif(camera: Camera, talker: HttpTalker, config, password_for: Callable[[str], str]) -> None:
+    password = password_for("onvif")
     username = camera.raw_discovery_payload.get("username") or "admin"
     body = build_set_network_request(
         camera.target_ip or "",
@@ -165,4 +169,5 @@ ASSIGNERS: dict[str, Assigner] = {
     "tiandy": _assign_tiandy,
     "onvif": _assign_onvif,
     "generic": _assign_onvif,
+    "xmsecu": assign_xmsecu,
 }

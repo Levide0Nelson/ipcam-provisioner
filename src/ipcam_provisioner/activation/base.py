@@ -39,9 +39,15 @@ USERNAME = "admin"
 
 
 class ActivationEngine:
-    def __init__(self, talker: HttpTalker, config) -> None:
+    def __init__(
+        self,
+        talker: HttpTalker,
+        config,
+        password_for: Callable[[str], str] | None = None,
+    ) -> None:
         self._talker = talker
         self._config = config
+        self._password_for = password_for or config.default_password_for
 
     async def activate(self, camera: Camera) -> Camera:
         if camera.activation_status is ActivationStatus.ACTIVE:
@@ -55,7 +61,7 @@ class ActivationEngine:
                 vendor,
             )
             return camera
-        password = self._config.default_password_for(vendor)
+        password = self._password_for(vendor)
         if not password:
             camera.activation_result = ActivationResult.MANUAL_REQUIRED
             logger.warning(
