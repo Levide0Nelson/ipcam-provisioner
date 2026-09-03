@@ -69,3 +69,15 @@ async def test_activates_inactive_onvif_via_create_users(config, semaphore):
         assert out.last_error is None
     finally:
         await net.stop()
+
+
+async def test_activation_uses_provided_password_for(config, network, talker, semaphore):
+    """Le callback `password_for` prime sur la configuration par défaut : une caméra
+    inactive est activée avec le mot de passe fourni à la volée."""
+    from ipcam_provisioner.activation import ActivationEngine
+
+    engine = ActivationEngine(talker, config, password_for=lambda vendor: "custom-secret")
+    camera = await _make_inactive_hik(config, network, talker, semaphore)
+    out = await engine.activate(camera)
+    assert out.activation_status is ActivationStatus.ACTIVE
+    assert out.activation_result is ActivationResult.SUCCESS
