@@ -212,7 +212,7 @@ src/ipcam_provisioner/
 ## Roadmap
 
 1. ~~Phase 0 — Spécification~~
-2. ~~Phase 1 — Environnement de simulation~~ — pipeline de bout en bout, tests 110 verts
+2. ~~Phase 1 — Environnement de simulation~~ — pipeline de bout en bout, tests 101 verts
 3. Phase 2 — Module de découverte réel — **transports multicast/broadcast + ARP validés (répétition locale)** ; à confirmer sur matériel : formats SADP/vendor réels
 4. Phase 3 — Fingerprinting & détection de conflits sur matériel réel
 5. Phase 4 — Activation, résolution de conflits (Layer 2), attribution IP
