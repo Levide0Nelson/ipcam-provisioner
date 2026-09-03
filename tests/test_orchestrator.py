@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from ipcam_provisioner.models import ActivationResult, ActivationStatus, AssignmentStatus
+from ipcam_provisioner.models import (
+    ActivationResult,
+    ActivationStatus,
+    AssignmentStatus,
+    RunMode,
+)
 from ipcam_provisioner.orchestrator import run
 
 
@@ -119,3 +124,45 @@ async def test_confirm_write_false_marks_manual_required(config, network):
     assert all(
         c.activation_result is ActivationResult.MANUAL_REQUIRED for c in result.cameras
     )
+
+
+async def test_discover_mode_is_read_only(config, network):
+    """Mode DISCOVER : aucune écriture réseau — aucune attribution, masque ni
+    modification d'IP. Les caméras restent identifiées mais non planifiées."""
+    result = await run(config, sim_network=network, mode=RunMode.DISCOVER)
+    assert result.run_mode == "discover"
+    assert result.total_assigned == 0
+    assert result.summary()["assigned"] == 0
+    for camera in result.cameras:
+        assert camera.assignment_status is not AssignmentStatus.SUCCESS
+        assert camera.target_ip is None
+        assert camera.temp_ip is None
+        assert camera.activation_status is ActivationStatus.ACTIVE or camera.activation_result is None
+
+
+async def test_discover_mode_still_identifies_cameras(config, network):
+    """Mode DISCOVER ne modifie rien mais découvre et identifie tout le parc."""
+    result = await run(config, sim_network=network, mode=RunMode.DISCOVER)
+    assert result.total_discovered == 8
+    assert all(c.vendor is not None for c in result.cameras)
+
+
+async def test_assign_mode_skips_activation_but_assigns_active(config, network):
+    """Mode ASSIGN : pas d'activation (les inactives sont laissées en manuel) mais les
+    caméras déjà actives sont bien attribuées."""
+    result = await run(config, sim_network=network, mode=RunMode.ASSIGN)
+    assert result.run_mode == "assign"
+    # aucune caméra activée par le pipeline (une inactive le reste / devient manuel)
+    assert not any(c.activation_result is ActivationResult.SUCCESS for c in result.cameras)
+    # les 3 caméras déjà actives sont attribuées
+    active = [
+        c
+        for c in result.cameras
+        if c.activation_status is ActivationStatus.ACTIVE and c.last_error is None
+    ]
+    assert len(active) == 3
+    assert all(c.assignment_status is AssignmentStatus.SUCCESS for c in active)
+    # les 5 inactives passent en activation manuelle requise
+    inactive = [c for c in result.cameras if c.activation_status is not ActivationStatus.ACTIVE]
+    assert len(inactive) == 5
+    assert all(c.activation_result is ActivationResult.MANUAL_REQUIRED for c in inactive)
