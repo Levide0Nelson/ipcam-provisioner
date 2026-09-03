@@ -5,6 +5,7 @@ from .dahua import DahuaFingerprinter
 from .hikvision import HikvisionFingerprinter
 from .onvif import OnvifFingerprinter
 from .tiandy import TiandyFingerprinter
+from .xmsecu import XmsecuFingerprinter
 
 REGISTRY: dict[str, Fingerprinter] = {
     "hikvision": HikvisionFingerprinter(),
@@ -12,6 +13,7 @@ REGISTRY: dict[str, Fingerprinter] = {
     "tiandy": TiandyFingerprinter(),
     "onvif": OnvifFingerprinter(),
     "generic": OnvifFingerprinter(),
+    "xmsecu": XmsecuFingerprinter(),
 }
 
 
