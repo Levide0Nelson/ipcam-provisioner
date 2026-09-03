@@ -21,7 +21,7 @@ DEFAULT_METHODS = [
 ]
 
 _METHOD_NAME_TO_ENUM = {m.value: m for m in DiscoveryMethod}
-_VALID_VENDORS = ("hikvision", "dahua", "tiandy", "onvif")
+_VALID_VENDORS = ("hikvision", "dahua", "tiandy", "onvif", "xmsecu")
 
 
 class ConfigError(ValueError):
