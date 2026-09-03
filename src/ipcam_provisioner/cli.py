@@ -17,7 +17,7 @@ import yaml
 
 from .config import ConfigError, load_config
 from .logging_conf import setup_logging
-from .models import ActivationResult, AssignmentResult, DiscoveryMethod, ResolutionStatus
+from .models import ActivationResult, AssignmentResult, DiscoveryMethod, ResolutionStatus, RunMode
 
 IS_SIMULATION_DOC = (
     "Phase 1 — sans matériel : le pipeline tourne sur des caméras simulées "
@@ -39,6 +39,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--simulate",
         action="store_true",
         help="exécuter le pipeline sur le site de démonstration simulé (Phase 1)",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=[m.value for m in RunMode],
+        default="discover",
+        help="mode de fonctionnement du pipeline : "
+        "discover (lecture seule, défaut), "
+        "assign (découverte + attribution IP), "
+        "activate_assign (découverte + activation + attribution)",
     )
     parser.add_argument(
         "--rehearse",
@@ -133,8 +142,9 @@ def main(argv: list[str] | None = None) -> int:
 
     from .orchestrator import run
 
+    mode = RunMode(args.mode)
     try:
-        result = asyncio.run(run(config, confirm_write=_ask_write_confirmation))
+        result = asyncio.run(run(config, confirm_write=_ask_write_confirmation, mode=mode))
     except Exception as exc:  # noqa: BLE001 - échec pipeline
         print(f"échec du run : {exc}", file=sys.stderr)
         return 1
@@ -291,10 +301,11 @@ def _run_config_delete(path_str: str, ask=None, say=None) -> int:
 
 
 MENU_ITEMS = [
-    ("1", "Lancer le pipeline réel sur la configuration (--config)"),
-    ("2", "Simuler sans matériel (site de démonstration Phase 1)"),
-    ("3", "Gérer les fichiers de configuration (créer / modifier / supprimer / générer)"),
-    ("4", "Répétition locale d'une méthode de découverte (Phase 2)"),
+    ("1", "Lancer le pipeline réel (découverte seule — lecture)"),
+    ("2", "Lancer le pipeline avec modification IP (attribution)"),
+    ("3", "Lancer le pipeline complet (activation + attribution)"),
+    ("4", "Gérer les fichiers de configuration (créer / modifier / supprimer / générer)"),
+    ("5", "Répétition locale d'une méthode de découverte (Phase 2)"),
     ("0", "Quitter"),
 ]
 
@@ -419,10 +430,22 @@ def _run_menu(config_path: str, ask=None, say=None, json_path: str | None = None
             except ConfigError as exc:
                 say(f"erreur de configuration : {exc}")
                 continue
-            _run_pipeline(config, json_path=json_path)
+            _run_pipeline(config, mode=RunMode.DISCOVER, json_path=json_path)
         elif choice == "2":
-            _run_simulated(json_path=json_path)
+            try:
+                config = load_config(config_path)
+            except ConfigError as exc:
+                say(f"erreur de configuration : {exc}")
+                continue
+            _run_pipeline(config, mode=RunMode.ASSIGN, json_path=json_path)
         elif choice == "3":
+            try:
+                config = load_config(config_path)
+            except ConfigError as exc:
+                say(f"erreur de configuration : {exc}")
+                continue
+            _run_pipeline(config, mode=RunMode.ACTIVATE_ASSIGN, json_path=json_path)
+        elif choice == "4":
             # Le sous-menu de config attend `ask(label, default)` à 2 args ; l'`ask`
             # du menu (1 arg, `input(label)`) requiert le prompt formaté complet, donc
             # on intègre le `[défaut]` et le séparateur ici.
@@ -433,7 +456,7 @@ def _run_menu(config_path: str, ask=None, say=None, json_path: str | None = None
                 ),
                 say=say,
             )
-        elif choice == "4":
+        elif choice == "5":
             method = _pick_rehearse_method(ask, say)
             if method is None:
                 say("  Retour au menu principal.")
@@ -483,15 +506,15 @@ def _ask_write_confirmation(camera) -> bool:
         f"{camera.mac_address or camera.ip_address} ({camera.vendor or '?'}, "
         f"{camera.model or 'modèle inconnu'})"
     )
-    answer = input(f"⚙️  Autoriser l'écriture réseau sur {label} ? [y/N] ")
+    answer = input(f"[ecriture] Autoriser l'ecriture reseau sur {label} ? [y/N] ")
     return answer.strip().lower() in ("y", "yes", "o", "oui")
 
 
-def _run_pipeline(config, json_path: str | None = None) -> int:
+def _run_pipeline(config, mode: RunMode = RunMode.DISCOVER, json_path: str | None = None) -> int:
     from .orchestrator import run
 
     try:
-        result = asyncio.run(run(config, confirm_write=_ask_write_confirmation))
+        result = asyncio.run(run(config, confirm_write=_ask_write_confirmation, mode=mode))
     except Exception as exc:  # noqa: BLE001 - échec pipeline
         print(f"échec du run : {exc}", file=sys.stderr)
         return 1
@@ -598,9 +621,15 @@ def render(result: AssignmentResult) -> None:
 
 def _render_summary(result: AssignmentResult) -> None:
     summary = result.summary()
+    mode_label = {
+        "discover": "Découverte seule (lecture)",
+        "assign": "Découverte + Attribution IP",
+        "activate_assign": "Découverte + Activation + Attribution",
+    }.get(result.run_mode, result.run_mode)
     print()
     print("=" * 62)
     print(f"  Rapport de synthèse — {result.site_name}")
+    print(f"  Mode : {mode_label}")
     print("=" * 62)
     print(
         f"  Caméras découvertes : {summary['discovered']:>3}"
@@ -668,7 +697,7 @@ def _render_cameras(cameras) -> None:
     if errors:
         print()
         for camera in errors:
-            print(f"      └─ {camera.mac_address or '?'} : {camera.last_error}")
+            print(f"      * {camera.mac_address or '?'} : {camera.last_error}")
 
 
 def _render_vendor_totals(cameras) -> None:
@@ -761,6 +790,7 @@ def _conflict_to_dict(conflict) -> dict:
 def _result_to_dict(result: AssignmentResult) -> dict:
     return {
         "site_name": result.site_name,
+        "run_mode": result.run_mode,
         "summary": result.summary(),
         "started_at": result.started_at.isoformat(),
         "finished_at": result.finished_at.isoformat() if result.finished_at else None,
