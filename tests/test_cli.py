@@ -295,8 +295,8 @@ def test_menu_simulate_action_dispatches(capsys, monkeypatch):
 
 def test_menu_dispatches_config_wizard(capsys, tmp_path, monkeypatch):
     dest = tmp_path / "menu_wiz.yaml"
-    # option 3 (gestion config) → 2 (modifier) → chemin → 0 (retour) → 0 (quitter)
-    answers = iter(["3", "2", "config/siteA.yaml", "0", "0"])
+    # option 4 (gestion config) → 2 (modifier) → chemin → 0 (retour) → 0 (quitter)
+    answers = iter(["4", "2", "config/siteA.yaml", "0", "0"])
     calls = []
 
     def fake_edit(path, ask, ask_password, say):
@@ -344,9 +344,9 @@ def test_pick_rehearse_method_zero_returns_none():
 def test_menu_rehearse_uses_submenu_then_loops(capsys, monkeypatch):
     from ipcam_provisioner.models import DiscoveryMethod
 
-    # option 4, puis méthode 1 (ONVIF), puis quitter
+    # option 5, puis méthode 1 (ONVIF), puis quitter
     calls = {"rehearsed": None}
-    answers = iter(["4", "1", "0"])
+    answers = iter(["5", "1", "0"])
 
     def fake_rehearse(method):
         calls["rehearsed"] = method
@@ -355,6 +355,52 @@ def test_menu_rehearse_uses_submenu_then_loops(capsys, monkeypatch):
     rc = cli._run_menu("config/x.yaml", ask=lambda _: next(answers))
     assert rc == 0
     assert calls["rehearsed"] is DiscoveryMethod.ONVIF_WS_DISCOVERY
+
+
+def test_menu_mode_discover_runs_read_only(capsys, monkeypatch):
+    from ipcam_provisioner.models import RunMode
+
+    calls = {"mode": None}
+    answers = iter(["1", "0"])
+
+    def fake_pipeline(config, mode=RunMode.DISCOVER, json_path=None):
+        calls["mode"] = mode
+        return 0
+
+    monkeypatch.setattr(cli, "_run_pipeline", fake_pipeline)
+    rc = cli._run_menu("config/siteA_real.yaml", ask=lambda _: next(answers))
+    assert rc == 0
+    assert calls["mode"] is RunMode.DISCOVER
+
+
+def test_menu_mode_assign_runs_assign(capsys, monkeypatch):
+    from ipcam_provisioner.models import RunMode
+
+    calls = {"mode": None}
+    answers = iter(["2", "0"])
+
+    def fake_pipeline(config, mode=RunMode.DISCOVER, json_path=None):
+        calls["mode"] = mode
+        return 0
+
+    monkeypatch.setattr(cli, "_run_pipeline", fake_pipeline)
+    rc = cli._run_menu("config/siteA_real.yaml", ask=lambda _: next(answers))
+    assert rc == 0
+    assert calls["mode"] is RunMode.ASSIGN
+
+
+def test_mode_flag_parses_any_mode():
+    parser = cli.build_parser()
+    assert parser.parse_args(["--mode", "discover"]).mode == "discover"
+    assert parser.parse_args(["--mode", "assign"]).mode == "assign"
+    assert parser.parse_args(["--mode", "activate_assign"]).mode == "activate_assign"
+
+
+def test_summary_prints_mode_label(capsys):
+    result = AssignmentResult(site_name="Démo")
+    result.run_mode = "activate_assign"
+    cli.render(result)
+    assert "Découverte + Activation + Attribution" in capsys.readouterr().out
 
 
 def test_render_conflicts_resolved_block(capsys):
