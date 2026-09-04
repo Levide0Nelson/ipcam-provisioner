@@ -26,6 +26,7 @@ class DiscoveryMethod(enum.Enum):
     TIANDY_DISCOVERY = "tiandy_discovery"
     ONVIF_WS_DISCOVERY = "onvif_ws_discovery"
     ARP_OUI_FALLBACK = "arp_oui_fallback"
+    ACTIVE_SUBNET_SCAN = "active_subnet_scan"
 
 
 class ActivationStatus(enum.Enum):
