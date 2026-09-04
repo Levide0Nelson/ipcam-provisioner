@@ -287,10 +287,20 @@ def test_menu_rejects_invalid_then_quits(capsys):
 
 
 def test_menu_simulate_action_dispatches(capsys, monkeypatch):
-    answers = iter(["2", "0"])
-    monkeypatch.setattr(cli, "_run_simulated", lambda json_path=None: 0)
-    rc = cli._run_menu("config/does-not-exist.yaml", ask=lambda _: next(answers))
+    # Test option 1 (découverte seule) qui utilise le fichier de config
+    from ipcam_provisioner.models import RunMode
+    answers = iter(["1", "0"])
+    calls = {"run": False}
+
+    def fake_pipeline(config, mode=RunMode.DISCOVER, json_path=None):
+        calls["run"] = True
+        return 0
+
+    monkeypatch.setattr(cli, "_run_pipeline", fake_pipeline)
+    # Utilise un fichier de config existant pour éviter l'erreur de chargement
+    rc = cli._run_menu("config/example_site.yaml", ask=lambda _: next(answers))
     assert rc == 0
+    assert calls["run"] is True
 
 
 def test_menu_dispatches_config_wizard(capsys, tmp_path, monkeypatch):
@@ -373,18 +383,37 @@ def test_menu_mode_discover_runs_read_only(capsys, monkeypatch):
     assert calls["mode"] is RunMode.DISCOVER
 
 
-def test_menu_mode_assign_runs_assign(capsys, monkeypatch):
-    from ipcam_provisioner.models import RunMode
-
+def test_menu_mode_assign_interactive_flow(capsys, monkeypatch):
+    # Test option 2 (attribution interactive) - nouveau flux sans fichier config
+    from ipcam_provisioner.models import AssignmentResult, RunMode
     calls = {"mode": None}
-    answers = iter(["2", "0"])
+    # Each password is asked twice (confirmation)
+    answers = iter([
+        "2",           # choix menu
+        "192.168.5.10",  # IP début
+        "192.168.5.20",  # IP fin
+        "255.255.255.0", # masque
+        "192.168.5.1",   # passerelle
+        "testpwd",       # mdp défaut (1ère saisie)
+        "testpwd",       # mdp défaut (confirmation)
+        "testpwd",       # mdp actuel (1ère saisie)
+        "testpwd",       # mdp actuel (confirmation)
+        "admin",         # username
+        "",              # vendors (vide = tous)
+        "0",             # retour menu principal
+    ])
 
-    def fake_pipeline(config, mode=RunMode.DISCOVER, json_path=None):
+    async def fake_run(config, confirm_write=None, mode=RunMode.DISCOVER, ask_credentials=None):
         calls["mode"] = mode
-        return 0
+        return AssignmentResult(site_name="Test")
 
-    monkeypatch.setattr(cli, "_run_pipeline", fake_pipeline)
-    rc = cli._run_menu("config/siteA_real.yaml", ask=lambda _: next(answers))
+    monkeypatch.setattr("ipcam_provisioner.orchestrator.run", fake_run)
+    # ask_password consomme aussi de l'itérateur
+    rc = cli._run_menu(
+        "config/does-not-exist.yaml",
+        ask=lambda _: next(answers),
+        ask_password=lambda _: next(answers),
+    )
     assert rc == 0
     assert calls["mode"] is RunMode.ASSIGN
 
