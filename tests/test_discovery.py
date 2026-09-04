@@ -36,6 +36,9 @@ def test_oui_vendor_real_hikvision_1012fb():
 
 async def test_discover_all_demo(config, network):
     cameras = await discover_all(config, network)
+    # En mode simulation, le scan actif ne trouve pas de caméras supplémentaires
+    # car les caméras simulées écoutent sur 127.0.0.1, pas sur leurs IPs logiques.
+    # Le test vérifie que les 8 caméras du demo sont bien découvertes.
     assert len(cameras) == 8
     macs = [c.mac_address for c in cameras]
     assert len(set(macs)) == len(macs)
