@@ -1,13 +1,15 @@
-"""Interface CLI : formatage/affichage uniquement, jamais de logique métier (section 5).
+# -*- coding: utf-8 -*-
+"""Interface CLI : formatage/affichage uniquement, jamais de logique metier (section 5).
 
-`render(result)` est le seul point de présentation : synthèse + détail par caméra vers
-stdout, les logs structurés (JSON-lines) vont sur stderr.
+`render(result)` est le seul point de presentation : synthese + detail par camera vers
+stdout, les logs structures (JSON-lines) vont sur stderr.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import ipaddress
 import json
 import logging
 import sys
@@ -15,20 +17,94 @@ from pathlib import Path
 
 import yaml
 
-from .config import ConfigError, load_config
+from .config import ConfigError, build_config, load_config
 from .logging_conf import setup_logging
 from .models import ActivationResult, AssignmentResult, DiscoveryMethod, ResolutionStatus, RunMode
 
 IS_SIMULATION_DOC = (
-    "Phase 1 — sans matériel : le pipeline tourne sur des caméras simulées "
+    "Phase 1 — sans materiel : le pipeline tourne sur des cameras simulees "
     "(mocks UDP/HTTP Hikvision/Dahua/Tiandy/ONVIF + ARP)."
 )
 
 
+def _get_active_interface_ips() -> list[tuple[str, str, str]]:
+    """Retourne la liste des (interface_name, ipv4, cidr) pour les interfaces UP
+    avec une IPv4 non loopback/link-local. Utilise `ipconfig`/`ifconfig` via stdlib."""
+    ips: list[tuple[str, str, str]] = []
+    try:
+        import subprocess
+        if sys.platform == "win32":
+            # `ipconfig` : parse les blocs par adaptateur (sortie CP1252 sur Windows FR)
+            proc = subprocess.run(["ipconfig"], capture_output=True, check=False)
+            out = proc.stdout.decode("cp1252", errors="replace")
+            current_iface = None
+            for line in out.splitlines():
+                line_stripped = line.strip()
+                # Interface header line (doesn't start with space, has colon)
+                if line and not line.startswith(" ") and ":" in line:
+                    current_iface = line_stripped.rstrip(":")
+                    # Sanitize interface name for safe terminal display
+                    # Replace common CP1252 mojibake chars with ASCII equivalents
+                    sanitized = current_iface
+                    replacements = {
+                        "\u201a": "e",  # ‚
+                        "\u00e9": "e",  # é
+                        "\u00ea": "e",  # ê
+                        "\u00e8": "e",  # è
+                        "\u00f4": "o",  # ô
+                        "\u00fb": "u",  # û
+                        "\u00ee": "i",  # î
+                        "\u00e0": "a",  # à
+                        "\u00e7": "c",  # ç
+                    }
+                    for k, v in replacements.items():
+                        sanitized = sanitized.replace(k, v)
+                    # Also handle the mojibake from CP1252 misdecoding
+                    # "réseau" -> "r�seau" -> replace � with e
+                    sanitized = sanitized.replace("\ufffd", "e")
+                    current_iface = sanitized
+                # IPv4 line (starts with spaces, contains "IPv4" and ".")
+                if "IPv4" in line_stripped and "." in line_stripped:
+                    # IPv4 Address. . . . . . . . . . . : 192.168.1.100
+                    ip = line_stripped.split(":")[-1].strip()
+                    if not ip.startswith("127.") and not ip.startswith("169.254."):
+                        # Trouver le masque via la ligne suivante si possible
+                        cidr = "24"  # defaut
+                        # Garder le nom d'interface tel quel (UTF-8)
+                        iface_clean = current_iface or "?"
+                        ips.append((iface_clean, ip, cidr))
+        else:
+            # Linux/macOS : `ip -br addr` ou `ifconfig`
+            out = subprocess.run(["ip", "-br", "addr"], capture_output=True, text=True, check=False).stdout
+            for line in out.splitlines():
+                parts = line.split()
+                if len(parts) >= 3 and parts[1] == "UP":
+                    iface = parts[0]
+                    for cidr_ip in parts[2:]:
+                        if "/" in cidr_ip and "." in cidr_ip:
+                            ip, cidr = cidr_ip.split("/")
+                            if not ip.startswith("127.") and not ip.startswith("169.254."):
+                                ips.append((iface, ip, cidr))
+    except Exception:
+        pass
+    return ips
+
+
+def _format_network_info() -> str:
+    """Formate une ligne resumant les interfaces actives pour l'affichage menu."""
+    entries = _get_active_interface_ips()
+    if not entries:
+        return "  Réseau : aucune interface active détectée (vérifiez la connexion caméras)"
+    lines = ["  Réseau local détecté :"]
+    for iface, ip, cidr in entries:
+        lines.append(f"    {iface} : {ip}/{cidr}")
+    return "\n".join(lines)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="ipcam-provisioner",
-        description="Découverte, identification et attribution d'adresses IP pour caméras CCTV.",
+        prog="camnetpilot",
+        description="Decouverte, identification et attribution d'adresses IP pour cameras CCTV.",
     )
     parser.add_argument(
         "--config",
@@ -38,59 +114,59 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--simulate",
         action="store_true",
-        help="exécuter le pipeline sur le site de démonstration simulé (Phase 1)",
+        help="executer le pipeline sur le site de demonstration simule (Phase 1)",
     )
     parser.add_argument(
         "--mode",
         choices=[m.value for m in RunMode],
         default="discover",
         help="mode de fonctionnement du pipeline : "
-        "discover (lecture seule, défaut), "
-        "assign (découverte + attribution IP), "
-        "activate_assign (découverte + activation + attribution)",
+        "discover (lecture seule, defaut), "
+        "assign (decouverte + attribution IP), "
+        "activate_assign (decouverte + activation + attribution)",
     )
     parser.add_argument(
         "--rehearse",
         metavar="METHOD",
         choices=[m.value for m in DiscoveryMethod],
-        help="répétition locale d'une méthode de découverte réelle (multicast/broadcast) "
-        "sur son vrai groupe/port, contre une caméra virtuelle — sans matériel (Phase 2)",
+        help="repetition locale d'une methode de decouverte réelle (multicast/broadcast) "
+        "sur son vrai groupe/port, contre une camera virtuelle — sans materiel (Phase 2)",
     )
     parser.add_argument(
         "--method",
         action="append",
         choices=[m.value for m in DiscoveryMethod],
-        help="restreindre la découverte aux méthodes listées (répétable)",
+        help="restreindre la decouverte aux methodes listees (repetable)",
     )
     parser.add_argument(
         "--init",
         metavar="PATH",
-        help="créer un fichier de configuration YAML de départ (ex. config/site.yaml) "
-        "en réutilisant la configuration par défaut ou celle passée via --config",
+        help="creer un fichier de configuration YAML de depart (ex. config/site.yaml) "
+        "en reutilisant la configuration par défaut ou celle passee via --config",
     )
     parser.add_argument(
         "--wizard",
         action="store_true",
-        help="assistant interactif : construire une configuration en répondant à des "
-        "questions (menu type de caméras, plage, passerelle…) puis l'écrire",
+        help="assistant interactif : construire une configuration en repondant a des "
+        "questions (menu type de cameras, plage, passerelle…) puis l'ecrire",
     )
     parser.add_argument(
         "--menu",
         action="store_true",
-        help="ouvrir le menu interactif principal (sélection d'une action : simuler, "
-        "lancer le pipeline, répétition, config…)",
+        help="ouvrir le menu interactif principal (selection d'une action : simuler, "
+        "lancer le pipeline, repetition, config…)",
     )
     parser.add_argument(
         "--json",
         metavar="PATH",
-        help="exporter le rapport au format JSON dans le fichier indiqué (en complément "
+        help="exporter le rapport au format JSON dans le fichier indique (en complement "
         "de l'affichage console)",
     )
     parser.add_argument(
         "--config-edit",
         metavar="PATH",
         help="modifier interactivement un fichier de configuration YAML existant "
-        "(valeurs pré-remplies, Entrée pour conserver)",
+        "(valeurs pre-remplies, Entrée pour conserver)",
     )
     parser.add_argument(
         "--config-delete",
@@ -101,12 +177,32 @@ def build_parser() -> argparse.ArgumentParser:
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="niveau de détail des logs JSON-lines (stderr)",
+        help="niveau de detail des logs JSON-lines (stderr)",
     )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Force UTF-8 encoding on Windows
+    if sys.platform == "win32":
+        import subprocess
+        subprocess.run(["cmd", "/c", "chcp", "65001"], capture_output=True, check=False)
+        # Reconfigure stdout/stderr for UTF-8 (Python 3.7+)
+        if hasattr(sys.stdout, "reconfigure"):
+            try:
+                sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+                sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+            except OSError:
+                # Fallback: wrap with TextIOWrapper if reconfigure fails
+                import io
+                sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+                sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+        else:
+            # Fallback for older Python: wrap with TextIOWrapper
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
     args = build_parser().parse_args(argv)
     setup_logging(getattr(logging, args.log_level))
 
@@ -145,21 +241,21 @@ def main(argv: list[str] | None = None) -> int:
     mode = RunMode(args.mode)
     try:
         result = asyncio.run(run(config, confirm_write=_ask_write_confirmation, mode=mode))
-    except Exception as exc:  # noqa: BLE001 - échec pipeline
-        print(f"échec du run : {exc}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 - echec pipeline
+        print(f"echec du run : {exc}", file=sys.stderr)
         return 1
     return _emit_report(result, args.json)
 
 
 def _run_init(dest: str, source_config: str) -> int:
-    """Phase 5 — --init : réutilise la configuration existante (ou les valeurs par
-    défaut) et écrit un fichier YAML de départ exploitable."""
+    """Phase 5 — --init : reutilise la configuration existante (ou les valeurs par
+    defaut) et ecrit un fichier YAML de depart exploitable."""
     from .config import build_config
     from .wizard import WizardAnswers, starter_yaml
 
     path = Path(dest)
     if path.exists():
-        print(f"le fichier existe déjà : {path}", file=sys.stderr)
+        print(f"le fichier existe deja : {path}", file=sys.stderr)
         return 2
 
     answers = WizardAnswers()
@@ -177,20 +273,20 @@ def _run_init(dest: str, source_config: str) -> int:
             )
             answers.default_password = first_pwd
         yaml_text = starter_yaml(answers)
-        # valide le YAML généré avant écriture
+        # valide le YAML genere avant ecriture
         build_config(yaml.safe_load(yaml_text))
     except ConfigError as exc:
-        print(f"configuration de départ invalide : {exc}", file=sys.stderr)
+        print(f"configuration de depart invalide : {exc}", file=sys.stderr)
         return 2
 
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(yaml_text, encoding="utf-8")
     except OSError as exc:
-        print(f"impossible d'écrire {path} : {exc}", file=sys.stderr)
+        print(f"impossible d'ecrire {path} : {exc}", file=sys.stderr)
         return 2
 
-    print(f"Configuration de départ écrite : {path}")
+    print(f"Configuration de depart ecrite : {path}")
     print("Modifiez le mot de passe par défaut (REPLACE_ME) puis chargez le fichier avec --config.")
     return 0
 
@@ -204,20 +300,20 @@ def _run_wizard(dest: str, ask=None, ask_password=None, say=None) -> int:
         say = print
     try:
         answers = collect_answers(ask=ask, ask_password=ask_password, say=say)
-        cfg = answers_to_config(answers)  # valide avant écriture
+        cfg = answers_to_config(answers)  # valide avant ecriture
     except CfgErr as exc:
         print(f"\nerreur : {exc}", file=sys.stderr)
         return 2
 
     path = Path(dest)
     if path.exists():
-        print(f"le fichier existe déjà : {path}", file=sys.stderr)
+        print(f"le fichier existe deja : {path}", file=sys.stderr)
         return 2
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(starter_yaml(answers), encoding="utf-8")
     except OSError as exc:
-        print(f"impossible d'écrire {path} : {exc}", file=sys.stderr)
+        print(f"impossible d'ecrire {path} : {exc}", file=sys.stderr)
         return 2
 
     say()
@@ -232,7 +328,7 @@ def _run_wizard(dest: str, ask=None, ask_password=None, say=None) -> int:
 
 def _run_config_edit(path_str: str, ask=None, ask_password=None, say=None) -> int:
     """Phase 5 — --config-edit : modifie un fichier YAML existant via le wizard,
-    valeurs pré-remplies (Entrée = conserver)."""
+    valeurs pre-remplies (Entrée = conserver)."""
     from .config import ConfigError as CfgErr
     from .wizard import (
         answers_to_config,
@@ -264,7 +360,7 @@ def _run_config_edit(path_str: str, ask=None, ask_password=None, say=None) -> in
         print(f"\nerreur : {exc}", file=sys.stderr)
         return 2
     except OSError as exc:
-        print(f"impossible d'écrire {path} : {exc}", file=sys.stderr)
+        print(f"impossible d'ecrire {path} : {exc}", file=sys.stderr)
         return 2
 
     print()
@@ -304,12 +400,13 @@ MENU_ITEMS = [
     ("1", "Lancer le pipeline réel (découverte seule — lecture)"),
     ("2", "Lancer le pipeline avec modification IP (attribution)"),
     ("3", "Lancer le pipeline complet (activation + attribution)"),
-    ("4", "Gérer les fichiers de configuration (créer / modifier / supprimer / générer)"),
-    ("5", "Répétition locale d'une méthode de découverte (Phase 2)"),
+    ("4", "Gerer les fichiers de configuration (creer / modifier / supprimer / generer)"),
+    ("5", "Répétition locale d'une methode de decouverte (Phase 2)"),
+    ("6", "Changer le fichier de configuration actif"),
     ("0", "Quitter"),
 ]
 
-#: Méthodes de découverte répétables depuis le menu (ARP exclu : pas de répétition L2).
+#: Methodes de decouverte repetables depuis le menu (ARP exclu : pas de repetition L2).
 _REHEARSAL_MENU_METHODS = [
     DiscoveryMethod.ONVIF_WS_DISCOVERY,
     DiscoveryMethod.SADP,
@@ -326,7 +423,7 @@ _REHEARSAL_LABELS = {
 
 
 def _pick_rehearse_method(ask, say) -> DiscoveryMethod | None:
-    """Sous-menu de sélection d'une méthode de découverte. Retourne la méthode choisie
+    """Sous-menu de selection d'une methode de decouverte. Retourne la methode choisie
     ou None si l'utilisateur abandonne (croix/Entrée)."""
     while True:
         say("\n  Méthode de découverte à répéter :")
@@ -343,21 +440,21 @@ def _pick_rehearse_method(ask, say) -> DiscoveryMethod | None:
             continue
         if 1 <= index <= len(_REHEARSAL_MENU_METHODS):
             return _REHEARSAL_MENU_METHODS[index - 1]
-        say(f"    numéro hors plage : {index}")
+        say(f"    numero hors plage : {index}")
 
 
 _CONFIG_MENU_ITEMS = [
     ("1", "Créer un nouveau site (--wizard)"),
     ("2", "Modifier une configuration existante (--config-edit)"),
     ("3", "Supprimer une configuration existante (--config-delete)"),
-    ("4", "Générer un fichier de config de départ (--init)"),
+    ("4", "Générer un fichier de config de depart (--init)"),
     ("0", "Retour au menu principal"),
 ]
 
 
 def _ask_path(ask, label: str, default: str = "") -> str:
     """Demande un chemin de fichier via `ask(label_nu, default)`. Taper Entrée retourne
-    `default` (si non vide). Le prompt (avec `[défaut] :`) est formaté par le callable."""
+    `default` (si non vide). Le prompt (avec `[defaut] :`) est formate par le callable."""
     raw = (ask(label, default) or "").strip()
     return raw or default
 
@@ -365,17 +462,17 @@ def _ask_path(ask, label: str, default: str = "") -> str:
 def _run_config_menu(config_path: str, ask=None, ask_password=None, say=None) -> None:
     """Sous-menu de gestion des fichiers de configuration (option 3 du menu principal).
 
-    `ask(label, default)` à 2 arguments lit les saisies visibles (il formate lui-même
-    le prompt `label [défaut] :`), `ask_password(label)` les saisies masquées, `say`
-    affiche. Chaque action demande le chemin du fichier concerné : l'utilisateur choisit
-    donc librement le fichier à créer / modifier / supprimer.
+    `ask(label, default)` a 2 arguments lit les saisies visibles (il formate lui-meme
+    le prompt `label [defaut] :`), `ask_password(label)` les saisies masquees, `say`
+    affiche. Chaque action demande le chemin du fichier concerne : l'utilisateur choisit
+    donc librement le fichier a creer / modifier / supprimer.
     """
     if ask is None:
         ask = lambda label, default: input(f"{label} [{default}] : " if default else f"{label} : ")  # noqa: E731
     if ask_password is None:
         import getpass
 
-        ask_password = lambda label: getpass.getpass(f"{label} (saisie masquée) : ")  # noqa: E731
+        ask_password = lambda label: getpass.getpass(f"{label} (saisie masquee) : ")  # noqa: E731
     if say is None:
         say = print
     ask_delete = lambda label: ask(label, "")  # noqa: E731
@@ -409,15 +506,143 @@ def _run_config_menu(config_path: str, ask=None, ask_password=None, say=None) ->
             say(f"  choix invalide : {choice!r}")
 
 
-def _run_menu(config_path: str, ask=None, say=None, json_path: str | None = None) -> int:
-    """Phase 5 — menu interactif principal : sélectionne et exécute une action."""
+def _run_interactive_assign(config_path: str, ask=None, ask_password=None, say=None, json_path: str | None = None) -> int:
+    """Flux interactif pour l'attribution IP (option 2) : demande plage + credentials,
+    construit une config en memoire, lance le pipeline ASSIGN. Pas de fichier requis."""
     if ask is None:
         ask = lambda label: input(label)  # noqa: E731
+    if ask_password is None:
+        import getpass
+        ask_password = lambda label: getpass.getpass(f"{label} (saisie masquee) : ")  # noqa: E731
     if say is None:
         say = print
 
+    say("\n--- Attribution IP interactive (sans fichier de config) ---")
+    say(_format_network_info())
+
+    # 1. Plage d'adresses
+    say("\n  Plage d'adresses a attribuer (ex: 192.168.5.10 - 192.168.5.20) :")
+    ip_start = (ask("    IP de debut : ") or "").strip()
+    ip_end = (ask("    IP de fin   : ") or "").strip()
+    if not ip_start or not ip_end:
+        say("  Plage requise : annule.")
+        return 0
+    try:
+        ipaddress.IPv4Address(ip_start)
+        ipaddress.IPv4Address(ip_end)
+    except ValueError:
+        say("  Adresses IPv4 invalides : annule.")
+        return 0
+
+    # 2. Masque / Passerelle (déduction auto depuis la 1re IP + /24 par défaut)
+    say("\n  Reseau (masque / passerelle) :")
+    mask = (ask("    Masque [255.255.255.0] : ") or "255.255.255.0").strip()
+    gateway = (ask(f"    Passerelle [{ip_start.rsplit('.', 1)[0]}.1] : ") or f"{ip_start.rsplit('.', 1)[0]}.1").strip()
+
+    # 3. Credentials : par défaut (usine) OU actuels (si déjà activées)
+    say("\n  Identifiants :")
+    say("    Les caméras en config usine utilisent le mot de passe par défaut (étiquette).")
+    say("    Les caméras déjà activées utilisent leurs identifiants actuels.")
+    say("    Tous les mots de passe doivent être confirmés (saisie double).")
+    
+    def ask_password_confirmed(prompt: str) -> str:
+        """Demande un mot de passe avec confirmation."""
+        while True:
+            pwd1 = (ask_password(f"{prompt} : ") or "").strip()
+            pwd2 = (ask_password(f"Confirmez {prompt.lower()} : ") or "").strip()
+            if pwd1 == pwd2:
+                return pwd1
+            say("  Les mots de passe ne correspondent pas. Réessayez.")
+    
+    default_pwd = ask_password_confirmed("    Mot de passe par défaut (usine)") or ""
+    current_pwd = ask_password_confirmed("    Mot de passe actuel (si déjà activées, Entrée = identique)") or default_pwd
+    username = (ask("    Nom d'utilisateur [admin] : ") or "admin").strip()
+
+    # 4. Vendors attendus (optionnel, pour pre-filtrer)
+    say("\n  Types de caméras attendus (optionnel, Entrée = tous) :")
+    say("    Ex: hikvision,dahua,tiandy,onvif,xmsecu")
+    vendors_input = (ask("    Vendors : ") or "").strip()
+    vendors = [v.strip().lower() for v in vendors_input.split(",") if v.strip()] if vendors_input else []
+
+    # 5. Construire la config en memoire
+    try:
+        config = build_config({
+            "site_name": "Interactive",
+            "ip_range": {"start": ip_start, "end": ip_end},
+            "subnet_mask": mask,
+            "gateway": gateway,
+            "vendors": {v: {"default_password": default_pwd or current_pwd} for v in vendors} if vendors else {
+                "hikvision": {"default_password": default_pwd or current_pwd},
+                "dahua": {"default_password": default_pwd or current_pwd},
+                "tiandy": {"default_password": default_pwd or current_pwd},
+                "onvif": {"default_password": default_pwd or current_pwd},
+                "xmsecu": {"default_password": default_pwd or current_pwd},
+            },
+            "discovery": {"methods": ["onvif_ws_discovery", "sadp", "dahua_discovery", "tiandy_discovery", "arp_oui_fallback"]},
+        })
+    except ConfigError as exc:
+        say(f"  Erreur de configuration : {exc}")
+        return 1
+
+    # 6. Lancer le pipeline ASSIGN avec callback de credentials dynamique
+    def ask_credentials(vendor: str):
+        # Pour les cameras inactives (usine) : default_pwd
+        # Pour les cameras actives : current_pwd
+        return (username, current_pwd or default_pwd)
+
+    try:
+        from .orchestrator import run
+        result = asyncio.run(run(
+            config,
+            confirm_write=lambda c: True,  # deja confirme par le flux interactif
+            mode=RunMode.ASSIGN,
+            ask_credentials=ask_credentials,
+        ))
+    except Exception as exc:
+        say(f"echec du run : {exc}")
+        return 1
+
+    return _emit_report(result, json_path)
+
+
+# ASCII Banner for CamNetPilot
+BANNER = r"""
+________  ________  _____ ______   ________   _______  _________  ________  ___  ___       ________  _________   
+|\   ____\|\   __  \|\   _ \  _   \|\   ___  \|\  ___ \|\___   ___\\   __  \|\  \|\  \     |\   __  \|\___   ___\ 
+\ \  \___|\ \  \|\  \ \  \\\__\ \  \ \  \\ \  \ \   __/\|___ \  \_\ \  \|\  \ \  \ \  \    \ \  \|\  \|___ \  \_| 
+ \ \  \    \ \   __  \ \  \\|__| \  \ \  \\ \  \ \  \_|/__  \ \  \ \ \   ____\ \  \ \  \    \ \  \\\  \   \ \  \  
+  \ \  \____\ \  \ \  \ \  \    \ \  \ \  \\ \  \ \  \_|\ \  \ \  \ \ \  \___|\ \  \ \  \____\ \  \\\  \   \ \  \ 
+   \ \_______\ \__\ \__\ \__\    \ \__\ \__\\ \__\ \_______\  \ \__\ \ \__\    \ \__\ \_______\ \_______\   \ \__\
+    \|_______|\|__|\|__|\|__|     \|__|\|__| \|__|\|_______|   \|__|  \|__|     \|__|\|_______|\|_______|    \|__| 
+"""
+
+def _print_banner(say):
+    """Print the application banner."""
+    for line in BANNER.strip('\n').split('\n'):
+        say(line)
+    say("Camera Network Pilot — Automated IP Provisioning")
+    say("")
+
+
+def _run_menu(config_path: str, ask=None, ask_password=None, say=None, json_path: str | None = None) -> int:
+    """Phase 5 — menu interactif principal : selectionne et execute une action."""
+    if ask is None:
+        ask = lambda label: input(label)  # noqa: E731
+    if ask_password is None:
+        import getpass
+        ask_password = lambda label: getpass.getpass(f"{label} (saisie masquee) : ")  # noqa: E731
+    if say is None:
+        say = print
+
+    _print_banner(say)
+
+    current_config_path = config_path
+
     while True:
-        say("\n===== ipcam-provisioner =====")
+        say("\n===== CamNetPilot Provisioner Tool =====")
+        say(_format_network_info())
+        say(f"  Config active : {current_config_path}")
+        say("")
         for code, label in MENU_ITEMS:
             say(f"  {code}. {label}")
         choice = (ask("Votre choix : ") or "").strip()
@@ -426,34 +651,28 @@ def _run_menu(config_path: str, ask=None, say=None, json_path: str | None = None
             return 0
         if choice == "1":
             try:
-                config = load_config(config_path)
+                config = load_config(current_config_path)
             except ConfigError as exc:
                 say(f"erreur de configuration : {exc}")
                 continue
             _run_pipeline(config, mode=RunMode.DISCOVER, json_path=json_path)
         elif choice == "2":
-            try:
-                config = load_config(config_path)
-            except ConfigError as exc:
-                say(f"erreur de configuration : {exc}")
-                continue
-            _run_pipeline(config, mode=RunMode.ASSIGN, json_path=json_path)
+            return _run_interactive_assign(current_config_path, ask=ask, ask_password=ask_password, say=say, json_path=json_path)
         elif choice == "3":
             try:
-                config = load_config(config_path)
+                config = load_config(current_config_path)
             except ConfigError as exc:
                 say(f"erreur de configuration : {exc}")
                 continue
             _run_pipeline(config, mode=RunMode.ACTIVATE_ASSIGN, json_path=json_path)
         elif choice == "4":
-            # Le sous-menu de config attend `ask(label, default)` à 2 args ; l'`ask`
-            # du menu (1 arg, `input(label)`) requiert le prompt formaté complet, donc
-            # on intègre le `[défaut]` et le séparateur ici.
+            import getpass
             _run_config_menu(
-                config_path,
+                current_config_path,
                 ask=lambda label, default: ask(  # noqa: E731
                     f"{label} [{default}] : " if default else f"{label} : "
                 ),
+                ask_password=lambda label: getpass.getpass(f"{label} (saisie masquee) : "),
                 say=say,
             )
         elif choice == "5":
@@ -462,6 +681,17 @@ def _run_menu(config_path: str, ask=None, say=None, json_path: str | None = None
                 say("  Retour au menu principal.")
                 continue
             _rehearse_discovery(method)
+        elif choice == "6":
+            new_path = (ask(f"  Nouveau fichier de config [{current_config_path}] : ") or "").strip()
+            if new_path:
+                try:
+                    load_config(new_path)  # valide
+                    current_config_path = new_path
+                    say(f"  Config active changee : {current_config_path}")
+                except ConfigError as exc:
+                    say(f"  Fichier invalide : {exc}")
+            else:
+                say("  Inchange.")
         else:
             say(f"choix invalide : {choice!r}")
 
@@ -482,29 +712,29 @@ def _run_simulated(json_path: str | None = None) -> int:
 
     try:
         result = asyncio.run(_run_simulated())
-    except Exception as exc:  # noqa: BLE001 - échec pipeline (niveau CRITICAL)
-        print(f"échec du run : {exc}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 - echec pipeline (niveau CRITICAL)
+        print(f"echec du run : {exc}", file=sys.stderr)
         return 1
     return _emit_report(result, json_path)
 
 
 def _ask_write_confirmation(camera) -> bool:
-    """Demande à l'utilisateur s'il autorise une *écriture* réseau sur cette caméra.
+    """Demande a l'utilisateur s'il autorise une *ecriture* reseau sur cette camera.
 
     En non-interactif (stdin non terminal), on refuse par défaut : un script ne
-    modifie jamais le réseau sans confirmation explicite. `--config` reste donc sûr
+    modifie jamais le reseau sans confirmation explicite. `--config` reste donc sur
     en CI / dans un pipe.
     """
     if not sys.stdin.isatty():
         print(
-            f"[lecture seule] pas de terminal — écriture refusée pour "
+            f"[lecture seule] pas de terminal — ecriture refusee pour "
             f"{camera.mac_address or camera.ip_address}",
             file=sys.stderr,
         )
         return False
     label = (
         f"{camera.mac_address or camera.ip_address} ({camera.vendor or '?'}, "
-        f"{camera.model or 'modèle inconnu'})"
+        f"{camera.model or 'modele inconnu'})"
     )
     answer = input(f"[ecriture] Autoriser l'ecriture reseau sur {label} ? [y/N] ")
     return answer.strip().lower() in ("y", "yes", "o", "oui")
@@ -515,22 +745,22 @@ def _run_pipeline(config, mode: RunMode = RunMode.DISCOVER, json_path: str | Non
 
     try:
         result = asyncio.run(run(config, confirm_write=_ask_write_confirmation, mode=mode))
-    except Exception as exc:  # noqa: BLE001 - échec pipeline
-        print(f"échec du run : {exc}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 - echec pipeline
+        print(f"echec du run : {exc}", file=sys.stderr)
         return 1
     return _emit_report(result, json_path)
 
 
 def _emit_report(result: AssignmentResult, json_path: str | None = None) -> int:
-    """Affiche le rapport puis exporte éventuellement le JSON (aucune logique métier)."""
+    """Affiche le rapport puis exporte eventuellement le JSON (aucune logique metier)."""
     render(result)
     if json_path is not None:
         try:
             _write_json(result, json_path)
         except OSError as exc:
-            print(f"impossible d'écrire le rapport JSON {json_path} : {exc}", file=sys.stderr)
+            print(f"impossible d'ecrire le rapport JSON {json_path} : {exc}", file=sys.stderr)
             return 1
-        print(f"Rapport JSON écrit : {json_path}")
+        print(f"Rapport JSON ecrit : {json_path}")
     return 0
 
 
@@ -543,8 +773,8 @@ _REHEARSAL_CAMERA: dict[DiscoveryMethod, tuple[str, str, str]] = {
 
 
 def _rehearse_discovery(method: DiscoveryMethod) -> int:
-    """Phase 2 : valide le chemin réel (multicast/broadcast) d'une méthode de découverte,
-    sur la machine et sans matériel — une caméra virtuelle est inscrite sur le vrai
+    """Phase 2 : valide le chemin réel (multicast/broadcast) d'une methode de decouverte,
+    sur la machine et sans materiel — une camera virtuelle est inscrite sur le vrai
     port/groupe de diffusion du protocole."""
     from .discovery import discover_all
     from .simulation.camera import CameraSpec
@@ -553,15 +783,15 @@ def _rehearse_discovery(method: DiscoveryMethod) -> int:
 
     if method is DiscoveryMethod.ARP_OUI_FALLBACK:
         print(
-            "ARP : pas de répétition locale — ce fallback lit la table ARP du système "
-            "(voir README, section tests sur caméras réelles).",
+            "ARP : pas de repetition locale — ce fallback lit la table ARP du systeme "
+            "(voir README, section tests sur cameras réelles).",
             file=sys.stderr,
         )
         return 0
 
     spec = _REHEARSAL_CAMERA[method]
     print(
-        f"Répétition {method.value} réel (adresse/port du protocole contre une caméra virtuelle)…",
+        f"Répétition {method.value} réel (adresse/port du protocole contre une camera virtuelle)…",
         file=sys.stderr,
     )
 
@@ -601,13 +831,13 @@ def _rehearse_discovery(method: DiscoveryMethod) -> int:
 
     try:
         return asyncio.run(_run())
-    except Exception as exc:  # noqa: BLE001 - échec de répétition (niveau ERROR)
+    except Exception as exc:  # noqa: BLE001 - echec de repetition (niveau ERROR)
         print(f"échec de la répétition : {exc}", file=sys.stderr)
         return 1
 
 
 def render(result: AssignmentResult) -> None:
-    """Affiche le rapport de synthèse final (aucune logique métier ici)."""
+    """Affiche le rapport de synthese final (aucune logique metier ici)."""
     _render_summary(result)
     _render_cameras(result.cameras)
     _render_vendor_totals(result.cameras)
@@ -644,7 +874,7 @@ def _render_summary(result: AssignmentResult) -> None:
         print(f"  Activation manuelle requise : {summary['manual_required']:>3}")
     started = result.started_at.strftime("%H:%M:%S") if result.started_at else "?"
     finished = result.finished_at.strftime("%H:%M:%S") if result.finished_at else "?"
-    print(f"  Début : {started}   Fin : {finished}")
+    print(f"  Debut : {started}   Fin : {finished}")
 
 
 def _render_cameras(cameras) -> None:
@@ -701,7 +931,7 @@ def _render_cameras(cameras) -> None:
 
 
 def _render_vendor_totals(cameras) -> None:
-    """Répartition du parc par fabricant, à partir des caméras identifiées."""
+    """Repartition du parc par fabricant, a partir des cameras identifiees."""
     totals: dict[str, int] = {}
     for camera in cameras:
         if camera.vendor:
@@ -715,7 +945,7 @@ def _render_vendor_totals(cameras) -> None:
 
 
 def _render_conflicts(conflicts) -> None:
-    """Bloc dédié : détail des conflits d'adresse résolus (par groupe de MAC)."""
+    """Bloc dedie : detail des conflits d'adresse résolus (par groupe de MAC)."""
     resolved = [c for c in conflicts if c.resolution_status is ResolutionStatus.RESOLVED]
     if not resolved:
         return
@@ -740,7 +970,7 @@ def _render_conflicts(conflicts) -> None:
 
 
 def _render_manual_required(cameras) -> None:
-    """Bloc dédié : caméras laissées à l'opérateur (activation manuelle requise)."""
+    """Bloc dedie : cameras laissees a l'operateur (activation manuelle requise)."""
     pending = [c for c in cameras if c.activation_result is ActivationResult.MANUAL_REQUIRED]
     if not pending:
         return
@@ -801,7 +1031,7 @@ def _result_to_dict(result: AssignmentResult) -> dict:
 
 
 def _write_json(result: AssignmentResult, path: str) -> None:
-    """Sérialise le rapport en JSON (aucune logique métier ici)."""
+    """Serialise le rapport en JSON (aucune logique metier ici)."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
