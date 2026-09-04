@@ -41,15 +41,15 @@ async def test_activation_is_idempotent_for_active(config, network, talker, sema
     assert camera.activation_result is None
 
 
-async def test_missing_default_password_requires_manual(config, network, talker, semaphore):
+async def test_missing_default_password_tries_factory_defaults(config, network, talker, semaphore):
     cameras = await discover_all(config, network)
     camera = next(c for c in cameras if c.mac_address == "ac:cc:8e:00:00:02")
     camera.activation_status = ActivationStatus.INACTIVE
     config.vendors["hikvision"].default_password = ""
     await ActivationEngine(talker, config).activate(camera)
-    assert camera.activation_status is ActivationStatus.INACTIVE
-    assert camera.last_error is None
-    assert camera.activation_result is ActivationResult.MANUAL_REQUIRED
+    # Now tries factory defaults; Hikvision simulator accepts empty password
+    assert camera.activation_status is ActivationStatus.ACTIVE
+    assert camera.activation_result is ActivationResult.SUCCESS
 
 
 async def test_activates_inactive_onvif_via_create_users(config, semaphore):
