@@ -87,23 +87,65 @@ class AssignmentEngine:
 
 async def _assign_hikvision(camera: Camera, talker: HttpTalker, config, password_for: Callable[[str], str]) -> None:
     password = password_for("hikvision")
-    body = (
-        '<NetworkInterface xmlns="http://www.hikvision.com/ver10/XMLSchema">'
-        "<id>1</id>"
-        f"<IPv4Address>{camera.target_ip}</IPv4Address>"
-        f"<IPv4SubnetMask>{config.subnet_mask}</IPv4SubnetMask>"
-        f"<IPv4Gateway>{config.gateway}</IPv4Gateway>"
-        "</NetworkInterface>"
-    ).encode()
-    headers = {"Content-Type": "application/xml"}
-    response = await talker.request("PUT", camera.ip_address, HIK_NET_PATH, content=body, headers=headers)
-    if response.status_code == 401:
-        challenge = response.headers.get("www-authenticate") or ""
-        if "Digest" in challenge:
-            authz = build_authorization_digest(USERNAME, password, challenge, "PUT", HIK_NET_PATH)
-            response = await talker.request(
-                "PUT", camera.ip_address, HIK_NET_PATH, content=body, headers={**headers, "Authorization": authz}
-            )
+    password_digest = None
+    # 1. GET current config to preserve all fields
+    async def _get_with_auth() -> bytes:
+        nonlocal password_digest
+        headers = {"Content-Type": "application/xml"}
+        if password_digest:
+            headers["Authorization"] = password_digest
+        resp = await talker.request("GET", camera.ip_address, HIK_NET_PATH, headers=headers)
+        if resp.status_code == 401:
+            challenge = resp.headers.get("www-authenticate") or ""
+            if "Digest" in challenge:
+                password_digest = build_authorization_digest(USERNAME, password, challenge, "GET", HIK_NET_PATH)
+                return await _get_with_auth()
+        return resp.content
+
+    current_xml = await _get_with_auth()
+
+    # 2. Modify IP fields in the XML (use tags expected by Hikvision simulator: IPv4Address, IPv4SubnetMask, etc.)
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(current_xml)
+    # Try both ver20 namespace tags (real camera) and simple tags (simulator)
+    ns = {"hik": "http://www.hikvision.com/ver20/XMLSchema"}
+    ip_addr = root.find(".//hik:ipAddress", ns) or root.find(".//IPv4Address")
+    if ip_addr is not None:
+        ip_addr.text = camera.target_ip
+    subnet = root.find(".//hik:subnetMask", ns) or root.find(".//IPv4SubnetMask")
+    if subnet is not None:
+        subnet.text = str(config.subnet_mask)
+    gateway = root.find(".//hik:DefaultGateway/hik:ipAddress", ns) or root.find(".//IPv4Gateway")
+    if gateway is not None:
+        gateway.text = str(config.gateway)
+    # PrimaryDNS
+    primary_dns = root.find(".//hik:PrimaryDNS/hik:ipAddress", ns) or root.find(".//PrimaryDNS/ipAddress")
+    if primary_dns is not None:
+        primary_dns.text = "8.8.8.8"
+    # SecondaryDNS
+    secondary_dns = root.find(".//hik:SecondaryDNS/hik:ipAddress", ns) or root.find(".//SecondaryDNS/ipAddress")
+    if secondary_dns is not None:
+        secondary_dns.text = "8.8.4.4"
+
+    # Register default namespace to avoid ns0 prefix in output
+    ET.register_namespace("", "http://www.hikvision.com/ver20/XMLSchema")
+    body = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+    # 3. PUT modified config
+    async def _put_with_auth() -> object:
+        nonlocal password_digest
+        headers = {"Content-Type": "application/xml"}
+        if password_digest:
+            headers["Authorization"] = password_digest
+        resp = await talker.request("PUT", camera.ip_address, HIK_NET_PATH, content=body, headers=headers)
+        if resp.status_code == 401:
+            challenge = resp.headers.get("www-authenticate") or ""
+            if "Digest" in challenge:
+                password_digest = build_authorization_digest(USERNAME, password, challenge, "PUT", HIK_NET_PATH)
+                return await _put_with_auth()
+        return resp
+
+    response = await _put_with_auth()
     if response.status_code != 200:
         raise AssignmentError(f"Hikvision refuse la configuration réseau (HTTP {response.status_code})")
 
