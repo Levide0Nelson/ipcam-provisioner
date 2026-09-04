@@ -18,10 +18,24 @@ DEFAULT_METHODS = [
     DiscoveryMethod.TIANDY_DISCOVERY,
     DiscoveryMethod.ONVIF_WS_DISCOVERY,
     DiscoveryMethod.ARP_OUI_FALLBACK,
+    DiscoveryMethod.ACTIVE_SUBNET_SCAN,
 ]
 
 _METHOD_NAME_TO_ENUM = {m.value: m for m in DiscoveryMethod}
 _VALID_VENDORS = ("hikvision", "dahua", "tiandy", "onvif", "xmsecu")
+
+# Default passwords for factory/inactive cameras (common defaults per vendor)
+# Source: manufacturer documentation, common defaults found in the field
+DEFAULT_FACTORY_PASSWORDS: dict[str, list[str]] = {
+    "hikvision": ["12345", "admin", "123456", "888888", "1234", ""],
+    "dahua": ["admin", "888888", "123456", "666666", ""],
+    "tiandy": ["123456", "admin", "12345", ""],
+    "onvif": ["admin", "123456", "12345", ""],
+    "xmsecu": ["", "admin", "123456", "12345", "1234"],
+}
+
+# Maximum number of default passwords to try per vendor
+MAX_DEFAULT_PASSWORD_ATTEMPTS = 3
 
 
 class ConfigError(ValueError):
@@ -87,9 +101,19 @@ class ConcurrencyConfig:
 
 
 @dataclass
+class ActiveScanConfig:
+    target_subnets: list[str] = field(default_factory=list)
+    ports: list[int] = field(default_factory=lambda: [80, 554, 8000, 8080, 37020])
+    timeout: float = 0.5
+    max_concurrent: int = 100
+    scan_timeout: float = 20.0
+
+
+@dataclass
 class DiscoveryConfig:
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     methods: list[DiscoveryMethod] = field(default_factory=lambda: list(DEFAULT_METHODS))
+    active_scan: ActiveScanConfig = field(default_factory=ActiveScanConfig)
 
 
 @dataclass
@@ -165,6 +189,16 @@ def build_config(raw: dict) -> SiteConfig:
     if timeout <= 0:
         raise ConfigError("discovery.timeout_seconds doit être > 0")
     methods = _parse_methods(disc_raw.get("methods"))
+    
+    # Parse active_scan config
+    active_scan_raw = disc_raw.get("active_scan") or {}
+    active_scan = ActiveScanConfig(
+        target_subnets=active_scan_raw.get("target_subnets", []),
+        ports=active_scan_raw.get("ports", [80, 554, 8000, 8080, 37020]),
+        timeout=float(active_scan_raw.get("timeout", 0.5)),
+        max_concurrent=int(active_scan_raw.get("max_concurrent", 100)),
+        scan_timeout=float(active_scan_raw.get("scan_timeout", 20.0)),
+    )
 
     return SiteConfig(
         site_name=site_name,
@@ -173,7 +207,7 @@ def build_config(raw: dict) -> SiteConfig:
         gateway=gateway,
         vendors=vendors,
         concurrency=ConcurrencyConfig(max_parallel_requests=max_parallel),
-        discovery=DiscoveryConfig(timeout_seconds=timeout, methods=methods),
+        discovery=DiscoveryConfig(timeout_seconds=timeout, methods=methods, active_scan=active_scan),
     )
 
 
