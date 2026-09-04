@@ -1,0 +1,22 @@
+site_name: "Parc réel - plage 192.168.5.10-20"
+ip_range:
+  start: 192.168.5.10
+  end: 192.168.5.20
+subnet_mask: 255.255.255.0
+gateway: 192.168.5.1
+vendors:
+  hikvision:
+    default_password: "@zerty01"
+  xmsecu:
+    default_password: ""
+concurrency:
+  max_parallel_requests: 5
+discovery:
+  timeout_seconds: 5
+  methods: [active_subnet_scan, onvif_ws_discovery, sadp, dahua_discovery, tiandy_discovery, arp_oui_fallback]
+  active_scan:
+    target_subnets: ["192.168.1.0/24"]
+    ports: [80, 554, 8000, 8080, 37020]
+    timeout: 0.5
+    max_concurrent: 100
+    scan_timeout: 20.0
