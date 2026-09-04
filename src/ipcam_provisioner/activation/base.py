@@ -2,7 +2,7 @@
 
 Stratégie par branche :
 - Hikvision / Dahua / Tiandy : API du fabricant (ISAPI / CGI / JSON) avec le mot de
-  passe par défaut configuré par l'utilisateur.
+  passe par défaut configuré par l'utilisateur, ou essais des mots de passe usine connus.
 - ONVIF générique : tentative `CreateUsers` sur un appareil en config usine (comportement
   non garanti selon les fabricants) — sinon la caméra est marquée `manual_required`.
 - Vendor inconnu : `manual_required`, aucune tentative automatique.
@@ -18,6 +18,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 
+from ..config import DEFAULT_FACTORY_PASSWORDS, MAX_DEFAULT_PASSWORD_ATTEMPTS
 from ..models import (
     ActivationResult,
     ActivationStatus,
@@ -61,29 +62,60 @@ class ActivationEngine:
                 vendor,
             )
             return camera
-        password = self._password_for(vendor)
-        if not password:
+        
+        # Get user-provided password (or empty string)
+        user_password = self._password_for(vendor)
+        
+        # Build list of passwords to try: user password first, then factory defaults
+        passwords_to_try = []
+        if user_password:
+            passwords_to_try.append(user_password)
+        
+        # Add factory defaults for this vendor
+        factory_passwords = DEFAULT_FACTORY_PASSWORDS.get(vendor.lower(), [])
+        for pwd in factory_passwords:
+            if pwd not in passwords_to_try:
+                passwords_to_try.append(pwd)
+        
+        # Limit attempts
+        passwords_to_try = passwords_to_try[:MAX_DEFAULT_PASSWORD_ATTEMPTS]
+        
+        if not passwords_to_try:
             camera.activation_result = ActivationResult.MANUAL_REQUIRED
             logger.warning(
-                "mot de passe par défaut manquant pour vendor=%s (MAC %s)",
+                "aucun mot de passe à essayer pour vendor=%s (MAC %s)",
                 vendor,
                 camera.mac_address,
             )
             return camera
+        
         activator = ACTIVATORS[vendor]
 
-        async def attempt() -> Camera:
-            return await activator(camera, self._talker, password)
+        async def attempt_with_password(pwd: str) -> Camera:
+            return await activator(camera, self._talker, pwd)
 
-        try:
-            return await call_with_retry(
-                attempt, context=f"activation {camera.mac_address or camera.ip_address}", logger_=logger
-            )
-        except Exception as exc:  # noqa: BLE001 - isolation par caméra
-            camera.activation_result = ActivationResult.FAILED
-            camera.mark_error(f"activation : {exc}")
-            logger.error("échec activation MAC %s : %s", camera.mac_address, exc)
-            return camera
+        # Try each password until one works
+        last_error = None
+        for pwd in passwords_to_try:
+            try:
+                result = await call_with_retry(
+                    lambda: attempt_with_password(pwd),
+                    context=f"activation {camera.mac_address or camera.ip_address} (pwd attempt)",
+                    logger_=logger
+                )
+                if result.activation_result == ActivationResult.SUCCESS:
+                    logger.info("Activation réussie pour %s avec mot de passe", camera.mac_address)
+                    return result
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                logger.debug("Échec activation %s avec mot de passe: %s", camera.mac_address, exc)
+                continue
+        
+        # All passwords failed
+        camera.activation_result = ActivationResult.FAILED
+        camera.mark_error(f"activation : tous les mots de passe ont échoué (dernier: {last_error})")
+        logger.error("échec activation MAC %s : tous les mots de passe ont échoué", camera.mac_address)
+        return camera
 
 
 def _confirm_activated(camera: Camera) -> Camera:
