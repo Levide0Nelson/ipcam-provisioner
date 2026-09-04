@@ -254,8 +254,11 @@ class VirtualCamera:
             return self._hik_device_info(req)
         if req.path == "/ISAPI/System/activate" and req.method == "POST":
             return self._hik_activate(req)
-        if req.path.startswith("/ISAPI/System/Network/interfaces") and req.method == "PUT":
-            return self._hik_set_network(req)
+        if req.path.startswith("/ISAPI/System/Network/interfaces"):
+            if req.method == "GET":
+                return self._hik_get_network(req)
+            if req.method == "PUT":
+                return self._hik_set_network(req)
         return HttpResponse(status=404, body=b"Not Found")
 
     def _hik_device_info(self, req: HttpRequest) -> HttpResponse:
@@ -289,6 +292,60 @@ class VirtualCamera:
         if new_ip:
             self.change_ip(new_ip)
         return HttpResponse.text(200, "<ResponseStatus><statusCode>1</statusCode></ResponseStatus>")
+
+    def _hik_get_network(self, req: HttpRequest) -> HttpResponse:
+        if not self._active or not self._digest_ok(req, "GET", req.path):
+            return HttpResponse.unauthorized_digest()
+        # Return network config in Hikvision ver20 XML format
+        xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<NetworkInterface version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+<id>1</id>
+<IPAddress version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+<ipVersion>dual</ipVersion>
+<addressingType>static</addressingType>
+<ipAddress>{self.logical_ip}</ipAddress>
+<subnetMask>255.255.255.0</subnetMask>
+<ipv6Address>::</ipv6Address>
+<bitMask>0</bitMask>
+<DefaultGateway>
+<ipAddress>192.0.0.1</ipAddress>
+<ipv6Address>::</ipv6Address>
+</DefaultGateway>
+<PrimaryDNS>
+<ipAddress>8.8.8.8</ipAddress>
+</PrimaryDNS>
+<SecondaryDNS>
+<ipAddress>8.8.4.4</ipAddress>
+</SecondaryDNS>
+<Ipv6Mode>
+<ipV6AddressingType>ra</ipV6AddressingType>
+<ipv6AddressList>
+<v6Address>
+<id>1</id>
+<type>manual</type>
+<address>::</address>
+<bitMask>0</bitMask>
+</v6Address>
+</ipv6AddressList>
+</Ipv6Mode>
+</IPAddress>
+<Discovery version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+<UPnP>
+<enabled>false</enabled>
+</UPnP>
+<Zeroconf>
+<enabled>true</enabled>
+</Zeroconf>
+</Discovery>
+<Link version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+<MACAddress>{self.mac_address}</MACAddress>
+<autoNegotiation>true</autoNegotiation>
+<speed>10</speed>
+<duplex>half</duplex>
+<MTU>1500</MTU>
+</Link>
+</NetworkInterface>"""
+        return HttpResponse.text(200, xml, **{"Content-Type": "application/xml"})
 
     # -- Dahua (CGI) ---------------------------------------------------------
 
