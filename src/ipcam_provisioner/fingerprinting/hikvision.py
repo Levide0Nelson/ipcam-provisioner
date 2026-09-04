@@ -39,6 +39,11 @@ class HikvisionFingerprinter(Fingerprinter):
             # tentée ensuite tentera de trancher.
             camera.activation_status = ActivationStatus.INACTIVE
             return camera
+        if response.status_code == 403:
+            # Hikvision en config usine : ISAPI désactivé jusqu'à activation.
+            # Le body XML contient souvent <subStatusCode>notActivated</subStatusCode>.
+            camera.activation_status = ActivationStatus.INACTIVE
+            return camera
         raise RuntimeError(
             f"fingerprint Hikvision HTTP {response.status_code} sur {camera.ip_address}"
         )
