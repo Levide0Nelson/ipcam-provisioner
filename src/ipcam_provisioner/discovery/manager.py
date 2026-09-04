@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 
 from ..models import Camera, DiscoveryMethod
+from ..config import ActiveScanConfig, SiteConfig
+from .active_scan import ActiveSubnetScanner
 from .arp import ArpOuiFallbackAdapter
 from .base import DiscoveryAdapter, DiscoveryContext
 from .dahua import DahuaDiscoveryAdapter
@@ -21,7 +23,7 @@ ADAPTERS: dict[DiscoveryMethod, DiscoveryAdapter] = {
 }
 
 
-async def discover_all(config, sim_network=None) -> list[Camera]:
+async def discover_all(config: SiteConfig, sim_network=None) -> list[Camera]:
     """Découvre les caméras avec toutes les méthodes configurées, en parallèle.
 
     La dédup se fait par MAC — la première méthode (dans l'ordre de priorité de la
@@ -30,7 +32,14 @@ async def discover_all(config, sim_network=None) -> list[Camera]:
     """
     ctx = DiscoveryContext(config, sim_network)
     methods = config.discovery.methods
-    adapters = [ADAPTERS[m] for m in methods if m in ADAPTERS]
+    
+    # Instancie les adaptateurs, avec config spécifique pour active_subnet_scan
+    adapters: list[DiscoveryAdapter] = []
+    for m in methods:
+        if m == DiscoveryMethod.ACTIVE_SUBNET_SCAN:
+            adapters.append(ActiveSubnetScanner(config.discovery.active_scan))
+        elif m in ADAPTERS:
+            adapters.append(ADAPTERS[m])
 
     by_method: dict[DiscoveryMethod, list[Camera]] = {}
     results = await asyncio.gather(
