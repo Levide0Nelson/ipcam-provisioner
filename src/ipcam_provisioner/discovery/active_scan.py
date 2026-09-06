@@ -14,6 +14,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..config import ActiveScanConfig
 from ..models import Camera, DiscoveryMethod
 from .base import DiscoveryAdapter, DiscoveryContext
 
@@ -27,19 +28,6 @@ CAMERA_PORTS = [
 
 # Concurrence max pour le scan TCP (ajustable via config)
 DEFAULT_MAX_CONCURRENT = 200
-
-
-@dataclass
-class ActiveScanConfig:
-    ports: list[int] = field(default_factory=lambda: CAMERA_PORTS)
-    timeout: float = 0.5
-    max_concurrent: int = DEFAULT_MAX_CONCURRENT
-    scan_timeout: float = 30.0
-    # Si vide, scanne TOUS les sous-réseaux locaux détectés + sous-réseaux caméras courants
-    target_subnets: list[str] = field(default_factory=list)
-    # Si True, fait un ping sweep avant le scan TCP pour remplir la table ARP
-    ping_sweep_first: bool = True
-    ping_timeout: float = 0.3
 
 
 class ActiveSubnetScanner(DiscoveryAdapter):
