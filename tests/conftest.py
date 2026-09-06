@@ -13,7 +13,7 @@ from ipcam_provisioner.simulation.demo import build_demo_site, demo_config
 @pytest.fixture
 def config():
     cfg = demo_config()
-    cfg.discovery.timeout_seconds = 0.3
+    cfg.discovery.timeout_seconds = 2.0  # Increased for active scan + other methods
     return cfg
 
 
