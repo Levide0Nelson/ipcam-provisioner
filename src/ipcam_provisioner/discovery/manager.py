@@ -46,7 +46,7 @@ async def discover_all(config: SiteConfig, sim_network=None) -> list[Camera]:
         *(adapter.discover(ctx) for adapter in adapters), return_exceptions=True
     )
     for adapter, outcome in zip(adapters, results, strict=True):
-        if isinstance(outcome, Exception):
+        if isinstance(outcome, BaseException):
             # Un échec d'une méthode ne fait pas échouer la découverte des autres.
             continue
         by_method[adapter.method] = outcome
