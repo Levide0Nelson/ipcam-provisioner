@@ -1,0 +1,96 @@
+# CamNetPilot Provisioner Tool - Default Configuration
+# This file contains all default settings for successful discovery of any
+# camera, NVR, or network equipment connected to the PC.
+# Copy this file to config/site.yaml and customize for your environment.
+
+# Site identification
+site_name: "Default Site - Auto Discovery"
+
+# IP range for assignment (target subnet for camera reassignment)
+ip_range:
+  start: 192.168.5.10
+  end: 192.168.5.20
+subnet_mask: 255.255.255.0
+gateway: 192.168.5.1
+
+# Vendor default passwords (used for factory-reset cameras)
+# These are the MOST COMMON factory defaults - customize for your environment
+vendors:
+  hikvision:
+    default_password: "12345"          # Hikvision default: 12345 or admin/12345
+  dahua:
+    default_password: "admin"          # Dahua default: admin/admin
+  tiandy:
+    default_password: "123456"         # Tiandy default: admin/123456
+  onvif:
+    default_password: "123456"         # Generic ONVIF default
+  xmsecu:
+    default_password: ""               # XM/Sofia often empty password
+  uniview:
+    default_password: "123456"         # Uniview default
+  hanwha:
+    default_password: "12345"          # Hanwha/Samsung default
+  axis:
+    default_password: "pass"           # Axis default: root/pass
+  bosch:
+    default_password: "admin"          # Bosch default
+  panasonic:
+    default_password: "12345"          # Panasonic default
+  sony:
+    default_password: "admin"          # Sony default
+  pelco:
+    default_password: "admin"          # Pelco default
+  acti:
+    default_password: "123456"         # ACTi default
+  vandel:
+    default_password: "admin"          # Vivotek default
+  generic:
+    default_password: "admin"          # Fallback for unknown vendors
+
+# Concurrency settings
+concurrency:
+  max_parallel_requests: 50
+
+# Discovery configuration - CRITICAL for successful detection
+discovery:
+  timeout_seconds: 10
+  # Methods ordered by reliability/coverage
+  # - active_subnet_scan: Universal TCP scan (works regardless of IP)
+  # - onvif_ws_discovery: ONVIF WS-Discovery multicast
+  # - sadp: Hikvision SADP protocol
+  # - dahua_discovery: Dahua broadcast discovery
+  # - tiandy_discovery: Tiandy broadcast discovery
+  # - arp_oui_fallback: ARP table + OUI lookup (always enable as fallback)
+  methods: [
+    "active_subnet_scan",
+    "onvif_ws_discovery",
+    "sadp",
+    "dahua_discovery",
+    "tiandy_discovery",
+    "arp_oui_fallback"
+  ]
+
+  # Active subnet scan configuration - KEY FOR UNIVERSAL DISCOVERY
+  active_scan:
+    # Empty = scan ALL common camera subnets (29 subnets covering 99% of devices)
+    # Set specific subnets only if you want to limit scan scope
+    target_subnets: []
+
+    # Ports to scan (21 ports covering 99% of camera/NVR web/RTSP/management ports)
+    ports: [
+      80, 443, 554, 8000, 8001, 8080, 8081, 8082, 8088, 8089, 8090,
+      8888, 8889, 9000, 9001, 37020, 37777, 34567, 8899, 9999, 10000, 10001
+    ]
+
+    # Connection timeout (seconds)
+    timeout: 0.5
+
+    # Max concurrent connections (higher = faster, but more resource usage)
+    max_concurrent: 200
+
+    # Total scan timeout per subnet (seconds)
+    scan_timeout: 30.0
+
+    # Run ping sweep BEFORE TCP scan to populate ARP table (gets MAC addresses)
+    ping_sweep_first: true
+    ping_timeout: 0.3
