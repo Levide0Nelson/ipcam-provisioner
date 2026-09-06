@@ -1,22 +1,30 @@
-site_name: "Parc réel - plage 192.168.5.10-20"
+# Site-specific configuration for LEVIDE (Site B - 192.168.5.x range)
+# Extends default.yaml with site-specific overrides
+site_name: "Parc LEVIDE - plage 192.168.5.10-20"
 ip_range:
   start: 192.168.5.10
   end: 192.168.5.20
 subnet_mask: 255.255.255.0
 gateway: 192.168.5.1
+
+# Site-specific vendor passwords (override defaults)
 vendors:
   hikvision:
     default_password: "@zerty01"
   xmsecu:
     default_password: ""
+
 concurrency:
-  max_parallel_requests: 5
+  max_parallel_requests: 50
+
 discovery:
-  timeout_seconds: 5
+  timeout_seconds: 10
   methods: [active_subnet_scan, onvif_ws_discovery, sadp, dahua_discovery, tiandy_discovery, arp_oui_fallback]
   active_scan:
-    target_subnets: []
-    ports: [80, 554, 8000, 8080, 37020]
+    target_subnets: []  # Empty = scan all common camera subnets
+    # Ports inherited from default.yaml (21 ports)
     timeout: 0.5
-    max_concurrent: 100
-    scan_timeout: 20.0
+    max_concurrent: 200
+    scan_timeout: 30.0
+    ping_sweep_first: true
+    ping_timeout: 0.3
