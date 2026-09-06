@@ -103,10 +103,16 @@ class ConcurrencyConfig:
 @dataclass
 class ActiveScanConfig:
     target_subnets: list[str] = field(default_factory=list)
-    ports: list[int] = field(default_factory=lambda: [80, 554, 8000, 8080, 37020])
+    ports: list[int] = field(default_factory=lambda: [
+        80, 443, 554, 8000, 8001, 8080, 8081, 8082, 8088, 8089, 8090,
+        8888, 8889, 9000, 9001, 37020, 37777, 34567, 8899, 9999, 10000, 10001
+    ])
     timeout: float = 0.5
-    max_concurrent: int = 100
-    scan_timeout: float = 20.0
+    max_concurrent: int = 200
+    scan_timeout: float = 30.0
+    target_subnets: list[str] = field(default_factory=list)
+    ping_sweep_first: bool = True
+    ping_timeout: float = 0.3
 
 
 @dataclass
