@@ -15,7 +15,7 @@ discovery:
   timeout_seconds: 5
   methods: [active_subnet_scan, onvif_ws_discovery, sadp, dahua_discovery, tiandy_discovery, arp_oui_fallback]
   active_scan:
-    target_subnets: ["192.168.1.0/24"]
+    target_subnets: []
     ports: [80, 554, 8000, 8080, 37020]
     timeout: 0.5
     max_concurrent: 100
