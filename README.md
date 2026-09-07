@@ -1,4 +1,4 @@
-# camnetpilot
+# CamNetPilot
 
 Outil d'automatisation de la découverte, l'identification et l'attribution d'adresses IP
 pour installations CCTV à grande échelle, avec gestion automatique des conflits IP au
