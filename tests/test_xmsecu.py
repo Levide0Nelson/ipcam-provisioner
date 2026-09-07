@@ -14,13 +14,13 @@ import threading
 
 import pytest
 
-from ipcam_provisioner import dvrip
-from ipcam_provisioner.assignment.base import AssignmentError
-from ipcam_provisioner.assignment.xmsecu import assign_xmsecu
-from ipcam_provisioner.config import build_config
-from ipcam_provisioner.fingerprinting.base import FingerprintContext
-from ipcam_provisioner.fingerprinting.xmsecu import XmsecuFingerprinter
-from ipcam_provisioner.models import ActivationStatus, Camera, DiscoveryMethod
+from camnetpilot import dvrip
+from camnetpilot.assignment.base import AssignmentError
+from camnetpilot.assignment.xmsecu import assign_xmsecu
+from camnetpilot.config import build_config
+from camnetpilot.fingerprinting.base import FingerprintContext
+from camnetpilot.fingerprinting.xmsecu import XmsecuFingerprinter
+from camnetpilot.models import ActivationStatus, Camera, DiscoveryMethod
 
 # ---------------------------------------------------------------------------
 # Serveur DVRIP factice
@@ -334,3 +334,4 @@ async def test_assign_xmsecu_bad_password_raises(semaphore):
             await assign_xmsecu(camera, talker=None, config=config, password_for=password_for)
     finally:
         server.stop()
+

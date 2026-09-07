@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from ipcam_provisioner.config import SiteConfig
-from ipcam_provisioner.models import Camera, Conflict, DiscoveryMethod
-from ipcam_provisioner.planning import PlanningError, plan_target_ips
+from camnetpilot.config import SiteConfig
+from camnetpilot.models import Camera, Conflict, DiscoveryMethod
+from camnetpilot.planning import PlanningError, plan_target_ips
 
 
 def _config() -> SiteConfig:
-    from ipcam_provisioner.config import build_config
+    from camnetpilot.config import build_config
 
     return build_config(
         {
@@ -85,3 +85,4 @@ def test_exhausted_range_raises():
     except PlanningError:
         return
     raise AssertionError("PlanningError non levée sur plage saturée")
+

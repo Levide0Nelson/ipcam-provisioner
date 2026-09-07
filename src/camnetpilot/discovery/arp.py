@@ -20,7 +20,7 @@ from pathlib import Path
 from ..models import Camera, DiscoveryMethod
 from .base import DiscoveryAdapter, DiscoveryContext
 
-logger = logging.getLogger("ipcam_provisioner.discovery.arp")
+logger = logging.getLogger("camnetpilot.discovery.arp")
 
 #: Table OUI caméras (Phase 1 → enrichie en Phase 2 avec les OUIs observés sur
 #: matériel réel, ex. `c0:51:7e` : Hikvision DS-2CD1043G0E-I du site réel).
@@ -145,3 +145,4 @@ class ArpOuiFallbackAdapter(DiscoveryAdapter):
                 )
             )
         return cameras
+

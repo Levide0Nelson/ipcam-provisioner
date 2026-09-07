@@ -1,4 +1,4 @@
-# ipcam-provisioner
+# camnetpilot
 
 Outil d'automatisation de la découverte, l'identification et l'attribution d'adresses IP
 pour installations CCTV à grande échelle, avec gestion automatique des conflits IP au
@@ -63,21 +63,21 @@ pip install -e ".[dev]"
 ## Usage
 
 ```bash
-ipcam-provisioner --config config/example_site.yaml
+camnetpilot --config config/example_site.yaml
 ```
 
 Menu interactif principal (sélection d'une action : simuler, lancer le pipeline,
 configurer, répétitions, quitter) :
 
 ```bash
-ipcam-provisioner --menu
+camnetpilot --menu
 ```
 
 Pour exécuter le pipeline **sans matériel** (Phase 1), utiliser le site de démonstration
 simulé (caméras virtuelles UDP/HTTP + réseau ARP local) :
 
 ```bash
-ipcam-provisioner --simulate
+camnetpilot --simulate
 ```
 
 Le rapport de synthèse est affiché sur la sortie standard ; les logs structurés
@@ -89,10 +89,10 @@ Deux façons de produire un fichier YAML de site :
 
 ```bash
 # 1) fichier de départ réutilisant les valeurs par défaut (ou un --config existant)
-ipcam-provisioner --init config/site.yaml
+camnetpilot --init config/site.yaml
 
 # 2) assistant interactif : type de caméras, plage, passerelle, mot de passe…
-ipcam-provisioner --wizard --config config/site.yaml
+camnetpilot --wizard --config config/site.yaml
 ```
 
 L'assistant pose les questions (Entrée = valeur par défaut) et écrit une configuration
@@ -106,10 +106,10 @@ la découverte est exécutée par le **chemin réel** (multicast/broadcast) — 
 simulateur :
 
 ```bash
-ipcam-provisioner --rehearse onvif_ws_discovery   # multicast 239.255.255.250:3702
-ipcam-provisioner --rehearse sadp                 # broadcast 255.255.255.255:37020
-ipcam-provisioner --rehearse dahua_discovery      # broadcast 255.255.255.255:37810
-ipcam-provisioner --rehearse tiandy_discovery     # broadcast 255.255.255.255:9999
+camnetpilot --rehearse onvif_ws_discovery   # multicast 239.255.255.250:3702
+camnetpilot --rehearse sadp                 # broadcast 255.255.255.255:37020
+camnetpilot --rehearse dahua_discovery      # broadcast 255.255.255.255:37810
+camnetpilot --rehearse tiandy_discovery     # broadcast 255.255.255.255:9999
 ```
 
 Attendu : `Répétition <méthode> OK : 1 caméra(s) détectée(s).`
@@ -136,7 +136,7 @@ le même segment, puis vérifier qu'elle répond à un ping.
 ### 2) Scanner avec une seule méthode (recommander de commencer par WS-Discovery)
 
 ```bash
-ipcam-provisioner --config config/example_site.yaml --method onvif_ws_discovery
+camnetpilot --config config/example_site.yaml --method onvif_ws_discovery
 ```
 
 Attendu : la liste des caméras ONVIF avec leur IP. Le `--method` restreint la découverte ;
@@ -145,9 +145,9 @@ répéter le flag pour plusieurs méthodes (`--method sadp --method onvif_ws_dis
 Puis, selon le vendor de la caméra testée :
 
 ```bash
-ipcam-provisioner --config config/example_site.yaml --method sadp                # Hikvision
-ipcam-provisioner --config config/example_site.yaml --method dahua_discovery     # Dahua
-ipcam-provisioner --config config/example_site.yaml --method tiandy_discovery    # Tiandy
+camnetpilot --config config/example_site.yaml --method sadp                # Hikvision
+camnetpilot --config config/example_site.yaml --method dahua_discovery     # Dahua
+camnetpilot --config config/example_site.yaml --method tiandy_discovery    # Tiandy
 ```
 
 **Contrôles à faire sur une caméra utilisant la méthode testée :**
@@ -192,7 +192,7 @@ ruff check src tests
 ## Architecture
 
 ```
-src/ipcam_provisioner/
+src/camnetpilot/
 ├── models.py            Modèle de données (Camera, Conflict, AssignmentResult)
 ├── config.py            Chargement/validation YAML + utils IP
 ├── wizard.py            Assistant de configuration interactive --wizard / --init

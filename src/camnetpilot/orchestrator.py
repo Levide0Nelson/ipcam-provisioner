@@ -41,7 +41,7 @@ from .models import (
 from .net import HttpTalker, NetworkResolver
 from .planning import PlanningError, plan_target_ips
 
-logger = logging.getLogger("ipcam_provisioner.orchestrator")
+logger = logging.getLogger("camnetpilot.orchestrator")
 
 
 class _NullAnnouncer:
@@ -286,3 +286,4 @@ def _finish(result: AssignmentResult) -> AssignmentResult:
             result.total_failed += 1
     result.finished_at = datetime.now()
     return result
+

@@ -6,8 +6,8 @@ import ipaddress
 
 import pytest
 
-from ipcam_provisioner.config import ConfigError, IpRange, build_config, load_config
-from ipcam_provisioner.models import DiscoveryMethod
+from camnetpilot.config import ConfigError, IpRange, build_config, load_config
+from camnetpilot.models import DiscoveryMethod
 
 
 def _valid_raw() -> dict:
@@ -81,3 +81,4 @@ def test_load_config_invalid_yaml(tmp_path):
     path.write_text("foo: [1, 2\n", encoding="utf-8")
     with pytest.raises(ConfigError, match="YAML invalide"):
         load_config(path)
+

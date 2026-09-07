@@ -14,7 +14,7 @@ from typing import Any
 from ..models import Camera, DiscoveryMethod
 from .base import DiscoveryAdapter, DiscoveryContext
 
-logger = logging.getLogger("ipcam_provisioner.discovery.sadp")
+logger = logging.getLogger("camnetpilot.discovery.sadp")
 
 PROBE_PAYLOAD = b"SADP:DeviceDiscovery\n"
 
@@ -81,3 +81,4 @@ def _elem(root: ET.Element, tag: str) -> str | None:
     if node is None or node.text is None:
         return None
     return node.text.strip()
+

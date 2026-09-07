@@ -28,7 +28,7 @@ from ..net import HttpTalker
 from ..onvif_soap import build_create_users_request
 from ..retry import call_with_retry
 
-logger = logging.getLogger("ipcam_provisioner.activation")
+logger = logging.getLogger("camnetpilot.activation")
 
 Activator = Callable[[Camera, HttpTalker, str], Awaitable[Camera]]
 
@@ -220,3 +220,4 @@ def _urlencode(value: str) -> str:
 
 
 __all__ = ["ActivationEngine"]
+

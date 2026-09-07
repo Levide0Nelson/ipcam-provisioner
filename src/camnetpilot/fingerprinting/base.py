@@ -17,7 +17,7 @@ from ..models import ActivationStatus, Camera, DiscoveryMethod
 from ..net import HttpTalker
 from ..retry import call_with_retry
 
-logger = logging.getLogger("ipcam_provisioner.fingerprinting")
+logger = logging.getLogger("camnetpilot.fingerprinting")
 
 
 class FingerprintContext:
@@ -96,3 +96,4 @@ def parse_xml(content: bytes) -> ET.Element | None:
         return ET.fromstring(content.decode("utf-8", errors="replace"))
     except ET.ParseError:
         return None
+

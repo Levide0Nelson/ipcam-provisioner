@@ -13,7 +13,7 @@ from ..models import ActivationStatus, Camera, DiscoveryMethod
 from ..onvif_soap import build_device_request
 from .base import FingerprintContext, Fingerprinter, local_find, parse_xml
 
-logger = logging.getLogger("ipcam_provisioner.fingerprinting.onvif")
+logger = logging.getLogger("camnetpilot.fingerprinting.onvif")
 
 DEVICE_SERVICE_PATH = "/onvif/device_service"
 
@@ -109,3 +109,4 @@ def _vendor_alias(manufacturer: str) -> str | None:
 
 
 __all__ = ["OnvifFingerprinter"]
+

@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 
 from .logging_conf import is_transient_error
 
-logger = logging.getLogger("ipcam_provisioner.retry")
+logger = logging.getLogger("camnetpilot.retry")
 
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_RETRY_DELAYS = (0.5, 1.5)
@@ -54,3 +54,4 @@ async def call_with_retry(
 
 def retries_left(exception: Exception, attempt: int, max_attempts: int) -> bool:
     return attempt < max_attempts
+

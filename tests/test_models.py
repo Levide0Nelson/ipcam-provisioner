@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ipcam_provisioner.models import (
+from camnetpilot.models import (
     ActivationStatus,
     AssignmentResult,
     AssignmentStatus,
@@ -73,3 +73,4 @@ def test_assignment_result_summary():
         "conflicts_detected": 2,
         "conflicts_resolved": 2,
     }
+

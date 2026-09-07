@@ -1,6 +1,6 @@
-"""Adaptateur de découverte Dahua (UDP broadcast 37810).
+"""Adaptateur de découverte Tiandy (UDP broadcast 9999).
 
-Réponse textuelle key=value (format représentatif Phase 1, à confirmer en Phase 2).
+La réponse est modélisée en key=value (Phase 1, format réel à confirmer Phase 2).
 """
 
 from __future__ import annotations
@@ -11,13 +11,13 @@ from typing import Any
 from ..models import Camera, DiscoveryMethod
 from .base import DiscoveryAdapter, DiscoveryContext
 
-logger = logging.getLogger("ipcam_provisioner.discovery.dahua")
+logger = logging.getLogger("camnetpilot.discovery.tiandy")
 
-PROBE_PAYLOAD = b"Dahua:Discovery\n"
+PROBE_PAYLOAD = b"TIANDY:DISCOVER\n"
 
 
-class DahuaDiscoveryAdapter(DiscoveryAdapter):
-    method = DiscoveryMethod.DAHUA_DISCOVERY
+class TiandyDiscoveryAdapter(DiscoveryAdapter):
+    method = DiscoveryMethod.TIANDY_DISCOVERY
 
     async def discover(self, ctx: DiscoveryContext) -> list[Camera]:
         replies = await ctx.probe(self.method, PROBE_PAYLOAD)
@@ -27,7 +27,7 @@ class DahuaDiscoveryAdapter(DiscoveryAdapter):
             if camera is not None:
                 cameras.append(camera)
             elif reply.payload:
-                logger.debug("réponse Dahua non parseable", extra={
+                logger.debug("réponse Tiandy non parseable", extra={
                     "extra_fields": {"source": reply.source, "payload": reply.payload[:120]},
                 })
         return cameras
@@ -40,21 +40,22 @@ def _parse_reply(reply) -> Camera | None:
         key, eq, value = line.partition("=")
         if eq:
             fields[key.strip()] = value.strip()
-    mac = fields.get("DeviceMacAddress")
-    ip = fields.get("NetworkInterface.IPv4Address")
+    mac = fields.get("mac")
+    ip = fields.get("ip")
     if not mac or not ip:
         return None
     raw: dict[str, Any] = {
         "source": reply.source,
-        "payload_type": "dahua_probe_match",
+        "payload_type": "tiandy_probe_match",
         "payload": text,
         "fields": fields,
     }
     return Camera(
         mac_address=mac.lower(),
         ip_address=ip,
-        discovery_method=DiscoveryMethod.DAHUA_DISCOVERY,
+        discovery_method=DiscoveryMethod.TIANDY_DISCOVERY,
         raw_discovery_payload=raw,
-        vendor="dahua",
+        vendor="tiandy",
         vendor_confirmed=True,
     )
+

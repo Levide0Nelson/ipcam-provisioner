@@ -20,7 +20,7 @@ from .. import dvrip
 from ..models import ActivationStatus, Camera
 from .base import FingerprintContext, Fingerprinter
 
-logger = logging.getLogger("ipcam_provisioner.fingerprinting.xmsecu")
+logger = logging.getLogger("camnetpilot.fingerprinting.xmsecu")
 
 USERNAME = "admin"
 
@@ -91,3 +91,4 @@ class XmsecuFingerprinter(Fingerprinter):
 
 
 __all__ = ["XmsecuFingerprinter"]
+

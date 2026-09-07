@@ -14,7 +14,7 @@ from ..retry import call_with_retry
 from .errors import AssignmentError
 from .xmsecu import assign_xmsecu
 
-logger = logging.getLogger("ipcam_provisioner.assignment")
+logger = logging.getLogger("camnetpilot.assignment")
 
 USERNAME = "admin"
 HIK_NET_PATH = "/ISAPI/System/Network/interfaces/1"
@@ -213,3 +213,4 @@ ASSIGNERS: dict[str, Assigner] = {
     "generic": _assign_onvif,
     "xmsecu": assign_xmsecu,
 }
+

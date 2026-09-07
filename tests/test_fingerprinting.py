@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from ipcam_provisioner.discovery import discover_all
-from ipcam_provisioner.fingerprinting import build_engine
-from ipcam_provisioner.fingerprinting.base import FingerprintContext
-from ipcam_provisioner.models import ActivationStatus, DiscoveryMethod
+from camnetpilot.discovery import discover_all
+from camnetpilot.fingerprinting import build_engine
+from camnetpilot.fingerprinting.base import FingerprintContext
+from camnetpilot.models import ActivationStatus, DiscoveryMethod
 
 
 def _camera_by_mac(cameras, mac: str):
@@ -52,3 +52,4 @@ async def test_fingerprint_onvif_active_and_mac(config, network, talker, semapho
     assert out.vendor == "generic"
     assert out.mac_address == "aa:bb:cc:00:00:01"
     assert out.serial_number == "ONVIF-aabbcc00"
+

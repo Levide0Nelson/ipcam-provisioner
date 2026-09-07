@@ -17,7 +17,7 @@ from typing import Any
 from ..models import Camera, DiscoveryMethod
 from .base import DiscoveryAdapter, DiscoveryContext
 
-logger = logging.getLogger("ipcam_provisioner.discovery.active_scan")
+logger = logging.getLogger("camnetpilot.discovery.active_scan")
 
 # Ports caméras courants (ordre = priorité) - réduit aux plus critiques pour vitesse
 CAMERA_PORTS = [80, 554, 8000, 8080, 37020]

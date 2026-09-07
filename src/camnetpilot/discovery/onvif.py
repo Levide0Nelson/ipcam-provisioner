@@ -16,7 +16,7 @@ from ..models import Camera, DiscoveryMethod
 from .base import DiscoveryAdapter, DiscoveryContext
 from .sadp import _decode, _safe_parse
 
-logger = logging.getLogger("ipcam_provisioner.discovery.onvif")
+logger = logging.getLogger("camnetpilot.discovery.onvif")
 
 _WS = "http://schemas.xmlsoap.org/ws/2005/04/discovery"
 _ADDRESSING = "http://schemas.xmlsoap.org/ws/2004/08/addressing"
@@ -96,3 +96,4 @@ def _first(root: ET.Element, tag: str) -> str | None:
     if node is None or node.text is None:
         return None
     return node.text.strip()
+

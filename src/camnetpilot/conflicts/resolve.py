@@ -18,7 +18,7 @@ from typing import Protocol
 
 from ..models import Camera, Conflict, ResolutionStatus
 
-logger = logging.getLogger("ipcam_provisioner.conflicts")
+logger = logging.getLogger("camnetpilot.conflicts")
 
 
 class Layer2Announcer(Protocol):
@@ -115,3 +115,4 @@ def _temp_ip_assignments(
 
 
 __all__ = ["Layer2Announcer", "resolve_conflict"]
+

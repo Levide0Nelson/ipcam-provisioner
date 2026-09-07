@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from ipcam_provisioner import cli
-from ipcam_provisioner.models import AssignmentResult
+from camnetpilot import cli
+from camnetpilot.models import AssignmentResult
 
 
 def test_build_parser_defaults():
@@ -30,7 +30,7 @@ def test_render_outputs_summary(capsys):
 
 
 def test_render_lists_last_error(capsys):
-    from ipcam_provisioner.models import Camera, DiscoveryMethod
+    from camnetpilot.models import Camera, DiscoveryMethod
 
     result = AssignmentResult(site_name="Démo")
     camera = Camera(
@@ -45,7 +45,7 @@ def test_render_lists_last_error(capsys):
 
 
 def test_render_manual_required_block_when_present(capsys):
-    from ipcam_provisioner.models import (
+    from camnetpilot.models import (
         ActivationResult,
         ActivationStatus,
         Camera,
@@ -71,7 +71,7 @@ def test_render_manual_required_block_when_present(capsys):
 
 
 def test_render_omits_manual_required_block_when_none(capsys):
-    from ipcam_provisioner.models import (
+    from camnetpilot.models import (
         ActivationResult,
         ActivationStatus,
         Camera,
@@ -93,7 +93,7 @@ def test_render_omits_manual_required_block_when_none(capsys):
 
 
 def test_render_table_shows_columns_and_state_notes(capsys):
-    from ipcam_provisioner.models import (
+    from camnetpilot.models import (
         ActivationResult,
         ActivationStatus,
         AssignmentStatus,
@@ -149,7 +149,7 @@ def test_render_empty_camera_list(capsys):
 
 
 def test_render_vendor_totals(capsys):
-    from ipcam_provisioner.models import Camera, DiscoveryMethod
+    from camnetpilot.models import Camera, DiscoveryMethod
 
     result = AssignmentResult(site_name="Démo")
     result.cameras = [
@@ -181,7 +181,7 @@ def test_render_vendor_totals(capsys):
 
 
 def test_render_vendor_totals_omitted_when_none(capsys):
-    from ipcam_provisioner.models import Camera, DiscoveryMethod
+    from camnetpilot.models import Camera, DiscoveryMethod
 
     result = AssignmentResult(site_name="Démo")
     result.cameras = [
@@ -202,7 +202,7 @@ def test_main_missing_config_returns_two(capsys):
 
 
 def test_main_simulate_runs_end_to_end(capsys, monkeypatch):
-    from ipcam_provisioner.simulation import demo
+    from camnetpilot.simulation import demo
 
     original = demo.demo_config
 
@@ -225,7 +225,7 @@ def test_main_init_writes_valid_yaml(tmp_path, capsys):
     assert rc == 0
     assert dest.exists()
     assert "Configuration de départ écrite" in capsys.readouterr().out
-    from ipcam_provisioner.config import load_config
+    from camnetpilot.config import load_config
 
     cfg = load_config(dest)
     assert cfg.site_name == "Site A"
@@ -241,7 +241,7 @@ def test_main_init_refuses_existing_file(tmp_path, capsys):
 
 
 def test_main_wizard_writes_provided_answers(tmp_path, capsys, monkeypatch):
-    from ipcam_provisioner import wizard
+    from camnetpilot import wizard
 
     dest = tmp_path / "wiz.yaml"
     replies = iter(["Usine B", "10.0.0.10", "10.0.0.200", "255.255.255.0", "10.0.0.1", "2"])
@@ -259,7 +259,7 @@ def test_main_wizard_writes_provided_answers(tmp_path, capsys, monkeypatch):
     rc = cli.main(["--wizard", "--config", str(dest)])
     assert rc == 0
     assert dest.exists()
-    from ipcam_provisioner.config import load_config
+    from camnetpilot.config import load_config
 
     cfg = load_config(dest)
     assert cfg.site_name == "Usine B"
@@ -288,7 +288,7 @@ def test_menu_rejects_invalid_then_quits(capsys):
 
 def test_menu_simulate_action_dispatches(capsys, monkeypatch):
     # Test option 1 (découverte seule) qui utilise le fichier de config
-    from ipcam_provisioner.models import RunMode
+    from camnetpilot.models import RunMode
     answers = iter(["1", "0"])
     calls = {"run": False}
 
@@ -339,7 +339,7 @@ def test_config_menu_creates_edit_deletes_inits(capsys, monkeypatch, tmp_path):
 
 
 def test_pick_rehearse_method_by_number():
-    from ipcam_provisioner.models import DiscoveryMethod
+    from camnetpilot.models import DiscoveryMethod
 
     # 2 = SADP (2e entrée du sous-menu)
     method = cli._pick_rehearse_method(ask=lambda _: "2", say=lambda *_: None)
@@ -352,7 +352,7 @@ def test_pick_rehearse_method_zero_returns_none():
 
 
 def test_menu_rehearse_uses_submenu_then_loops(capsys, monkeypatch):
-    from ipcam_provisioner.models import DiscoveryMethod
+    from camnetpilot.models import DiscoveryMethod
 
     # option 5, puis méthode 1 (ONVIF), puis quitter
     calls = {"rehearsed": None}
@@ -368,7 +368,7 @@ def test_menu_rehearse_uses_submenu_then_loops(capsys, monkeypatch):
 
 
 def test_menu_mode_discover_runs_read_only(capsys, monkeypatch):
-    from ipcam_provisioner.models import RunMode
+    from camnetpilot.models import RunMode
 
     calls = {"mode": None}
     answers = iter(["1", "0"])
@@ -385,7 +385,7 @@ def test_menu_mode_discover_runs_read_only(capsys, monkeypatch):
 
 def test_menu_mode_assign_interactive_flow(capsys, monkeypatch):
     # Test option 2 (attribution interactive) - nouveau flux sans fichier config
-    from ipcam_provisioner.models import AssignmentResult, RunMode
+    from camnetpilot.models import AssignmentResult, RunMode
     calls = {"mode": None}
     # Each password is asked twice (confirmation)
     answers = iter([
@@ -407,7 +407,7 @@ def test_menu_mode_assign_interactive_flow(capsys, monkeypatch):
         calls["mode"] = mode
         return AssignmentResult(site_name="Test")
 
-    monkeypatch.setattr("ipcam_provisioner.orchestrator.run", fake_run)
+    monkeypatch.setattr("camnetpilot.orchestrator.run", fake_run)
     # ask_password consomme aussi de l'itérateur
     rc = cli._run_menu(
         "config/does-not-exist.yaml",
@@ -433,7 +433,7 @@ def test_summary_prints_mode_label(capsys):
 
 
 def test_render_conflicts_resolved_block(capsys):
-    from ipcam_provisioner.models import Conflict, ResolutionStatus
+    from camnetpilot.models import Conflict, ResolutionStatus
 
     result = AssignmentResult(site_name="Démo")
     result.conflicts = [
@@ -460,7 +460,7 @@ def test_render_conflicts_block_omitted_when_none(capsys):
 
 
 def test_json_export_writes_serialized_report(tmp_path, capsys):
-    from ipcam_provisioner.models import Camera, Conflict, DiscoveryMethod, ResolutionStatus
+    from camnetpilot.models import Camera, Conflict, DiscoveryMethod, ResolutionStatus
 
     result = AssignmentResult(site_name="Démo")
     result.total_discovered = 1
@@ -521,8 +521,8 @@ def test_config_delete_missing_file_returns_two(tmp_path, capsys):
 
 
 def test_config_edit_updates_existing_values(tmp_path, capsys):
-    from ipcam_provisioner.config import load_config
-    from ipcam_provisioner.wizard import WizardAnswers, starter_yaml
+    from camnetpilot.config import load_config
+    from camnetpilot.wizard import WizardAnswers, starter_yaml
 
     initial = WizardAnswers(
         site_name="Site A",
@@ -554,7 +554,7 @@ def test_config_edit_updates_existing_values(tmp_path, capsys):
 def test_config_edit_without_say_uses_print(tmp_path, capsys):
     """Régression : `--config-edit` doit fonctionner quand `say` n'est pas injecté
     (appel réel depuis main()), faute de quoi TypeError: 'NoneType' object is not callable."""
-    from ipcam_provisioner.wizard import WizardAnswers, starter_yaml
+    from camnetpilot.wizard import WizardAnswers, starter_yaml
 
     initial = WizardAnswers(
         site_name="Site A",
@@ -579,3 +579,4 @@ def test_config_edit_without_say_uses_print(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Édition de la configuration" in out
     assert "Configuration modifiée" in out
+

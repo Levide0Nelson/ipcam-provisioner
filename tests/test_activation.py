@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from ipcam_provisioner.activation import ActivationEngine
-from ipcam_provisioner.discovery import discover_all
-from ipcam_provisioner.fingerprinting import build_engine
-from ipcam_provisioner.fingerprinting.base import FingerprintContext
-from ipcam_provisioner.models import ActivationResult, ActivationStatus
-from ipcam_provisioner.net import HttpTalker
-from ipcam_provisioner.simulation.camera import CameraSpec
-from ipcam_provisioner.simulation.network import SimulatedNetwork
+from camnetpilot.activation import ActivationEngine
+from camnetpilot.discovery import discover_all
+from camnetpilot.fingerprinting import build_engine
+from camnetpilot.fingerprinting.base import FingerprintContext
+from camnetpilot.models import ActivationResult, ActivationStatus
+from camnetpilot.net import HttpTalker
+from camnetpilot.simulation.camera import CameraSpec
+from camnetpilot.simulation.network import SimulatedNetwork
 
 
 async def _make_inactive_hik(cfg, network, talker, semaphore):
@@ -74,10 +74,11 @@ async def test_activates_inactive_onvif_via_create_users(config, semaphore):
 async def test_activation_uses_provided_password_for(config, network, talker, semaphore):
     """Le callback `password_for` prime sur la configuration par défaut : une caméra
     inactive est activée avec le mot de passe fourni à la volée."""
-    from ipcam_provisioner.activation import ActivationEngine
+    from camnetpilot.activation import ActivationEngine
 
     engine = ActivationEngine(talker, config, password_for=lambda vendor: "custom-secret")
     camera = await _make_inactive_hik(config, network, talker, semaphore)
     out = await engine.activate(camera)
     assert out.activation_status is ActivationStatus.ACTIVE
     assert out.activation_result is ActivationResult.SUCCESS
+

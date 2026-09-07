@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from ipcam_provisioner.models import (
+from camnetpilot.models import (
     ActivationResult,
     ActivationStatus,
     AssignmentStatus,
     RunMode,
 )
-from ipcam_provisioner.orchestrator import run
+from camnetpilot.orchestrator import run
 
 
 async def test_full_pipeline_demo(config, network):
@@ -166,3 +166,4 @@ async def test_assign_mode_skips_activation_but_assigns_active(config, network):
     inactive = [c for c in result.cameras if c.activation_status is not ActivationStatus.ACTIVE]
     assert len(inactive) == 5
     assert all(c.activation_result is ActivationResult.MANUAL_REQUIRED for c in inactive)
+

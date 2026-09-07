@@ -14,7 +14,7 @@ import logging
 from .. import dvrip
 from .errors import AssignmentError
 
-logger = logging.getLogger("ipcam_provisioner.assignment.xmsecu")
+logger = logging.getLogger("camnetpilot.assignment.xmsecu")
 
 USERNAME = "admin"
 
@@ -80,3 +80,4 @@ def _disable_dhcp(client: dvrip.DvripClient) -> None:
 
 
 __all__ = ["assign_xmsecu"]
+
