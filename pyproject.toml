@@ -22,7 +22,7 @@ dev = [
 ]
 
 [project.scripts]
-camnetpilot = "ipcam_provisioner.cli:main"
+camnetpilot = "camnetpilot.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
