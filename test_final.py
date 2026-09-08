@@ -16,7 +16,6 @@ async def test():
     network = await build_demo_site(cfg)
     result = await discover_all(cfg, network)
     print(f'Discovered: {len(result)} cameras')
-    print(f'Result type: {type(result)}')
     for c in result:
         print(f'  {c.mac_address} {c.ip_address} {c.vendor} {c.activation_status.value}')
 
