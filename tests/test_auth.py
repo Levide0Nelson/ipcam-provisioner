@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import secrets
 
-from ipcam_provisioner.auth import (
+from camnetpilot.auth import (
     build_authorization_digest,
     build_basic_authorization,
     build_onvif_username_token,
@@ -68,3 +68,4 @@ def test_onvif_username_token_wrong_password_is_rejected():
         "</o:UsernameToken></Security>"
     )
     assert not verify_onvif_username_token(security, "WRONG", expected_username="admin")
+

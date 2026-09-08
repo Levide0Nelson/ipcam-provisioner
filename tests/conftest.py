@@ -6,8 +6,8 @@ import asyncio
 
 import pytest
 
-from ipcam_provisioner.net import HttpTalker
-from ipcam_provisioner.simulation.demo import build_demo_site, demo_config
+from camnetpilot.net import HttpTalker
+from camnetpilot.simulation.demo import build_demo_site, demo_config
 
 
 @pytest.fixture
@@ -34,3 +34,4 @@ async def talker(network):
 @pytest.fixture
 def semaphore():
     return asyncio.Semaphore(50)
+

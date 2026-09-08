@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ipcam-provisioner"
+name = "camnetpilot"
 version = "0.1.0"
 description = "Découverte, identification et attribution d'adresses IP pour caméras CCTV (Hikvision, Dahua, Tiandy, ONVIF)"
 readme = "README.md"
@@ -22,7 +22,7 @@ dev = [
 ]
 
 [project.scripts]
-ipcam-provisioner = "ipcam_provisioner.cli:main"
+camnetpilot = "ipcam_provisioner.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import ipaddress
 
-from ipcam_provisioner.config import build_config
-from ipcam_provisioner.conflicts import detect_conflicts, resolve_conflict
-from ipcam_provisioner.models import Camera, DiscoveryMethod, ResolutionStatus
-from ipcam_provisioner.planning import plan_target_ips
+from camnetpilot.config import build_config
+from camnetpilot.conflicts import detect_conflicts, resolve_conflict
+from camnetpilot.models import Camera, DiscoveryMethod, ResolutionStatus
+from camnetpilot.planning import plan_target_ips
 
 
 def _camera(mac: str, ip: str) -> Camera:
@@ -144,3 +144,4 @@ def test_planning_after_resolution_assigns_pool_ips():
     assert all(not config.ip_range.contains(c.ip_address) for c in cameras)
     # les deux caméras reçoivent une cible finale distincte dans la plage
     assert all(config.ip_range.contains(ip) for ip in targets)
+

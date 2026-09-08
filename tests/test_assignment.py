@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from ipcam_provisioner.assignment import AssignmentEngine
-from ipcam_provisioner.discovery import discover_all
-from ipcam_provisioner.fingerprinting import build_engine
-from ipcam_provisioner.fingerprinting.base import FingerprintContext
-from ipcam_provisioner.models import ActivationStatus, AssignmentStatus
+from camnetpilot.assignment import AssignmentEngine
+from camnetpilot.discovery import discover_all
+from camnetpilot.fingerprinting import build_engine
+from camnetpilot.fingerprinting.base import FingerprintContext
+from camnetpilot.models import ActivationStatus, AssignmentStatus
 
 
 async def _active_dahua(cfg, network, talker, semaphore):
@@ -53,3 +53,4 @@ async def test_assign_missing_target_fails(config, network, talker, semaphore):
     await AssignmentEngine(talker, config).assign(camera)
     assert camera.last_error is not None
     assert "adresse cible" in camera.last_error
+

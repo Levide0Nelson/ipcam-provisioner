@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ipcam_provisioner.config import ConfigError
-from ipcam_provisioner.wizard import (
+from camnetpilot.config import ConfigError
+from camnetpilot.wizard import (
     WizardAnswers,
     answers_to_config,
     collect_answers,
@@ -137,7 +137,7 @@ def test_collect_answers_edit_replaces_password():
 
 
 def test_parse_types_rejects_bad_numbers():
-    from ipcam_provisioner.wizard import _parse_types
+    from camnetpilot.wizard import _parse_types
 
     assert _parse_types("2") == ["dahua"]
     try:
@@ -171,7 +171,7 @@ def test_answers_to_config_is_valid():
 
 
 def test_answers_to_config_rejects_bad_range():
-    from ipcam_provisioner.config import ConfigError
+    from camnetpilot.config import ConfigError
 
     answers = WizardAnswers(
         site_name="Site",
@@ -189,7 +189,7 @@ def test_answers_to_config_rejects_bad_range():
 
 
 def test_starter_yaml_roundtrips_through_load_config(tmp_path):
-    from ipcam_provisioner.config import load_config
+    from camnetpilot.config import load_config
 
     answers = WizardAnswers(
         site_name="Usine",
@@ -281,7 +281,7 @@ def test_collect_answers_corrects_bad_subnet():
 
 
 def test_is_ip_rejects_ivan_and_zero():
-    from ipcam_provisioner.wizard import _is_ip
+    from camnetpilot.wizard import _is_ip
 
     assert not _is_ip("195.154.3")
     assert not _is_ip("195.154.3.")
@@ -290,3 +290,4 @@ def test_is_ip_rejects_ivan_and_zero():
     assert not _is_ip("192.168.1.256")
     assert _is_ip("192.168.1.10")
     assert _is_ip("255.255.255.0")
+

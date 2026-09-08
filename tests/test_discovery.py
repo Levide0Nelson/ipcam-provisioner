@@ -6,13 +6,13 @@ from collections import Counter
 
 import pytest
 
-from ipcam_provisioner.discovery import discover_all
-from ipcam_provisioner.discovery.arp import (
+from camnetpilot.discovery import discover_all
+from camnetpilot.discovery.arp import (
     _parse_arp_a,
     _parse_proc_arp,
     oui_vendor,
 )
-from ipcam_provisioner.models import DiscoveryMethod
+from camnetpilot.models import DiscoveryMethod
 
 
 def test_oui_vendor():
@@ -89,7 +89,7 @@ async def test_discover_no_duplicate_ip_for_onvif(config, network):
 
 
 async def test_discovery_methods_only_selected(config, network):
-    from ipcam_provisioner.config import build_config
+    from camnetpilot.config import build_config
 
     raw = {
         "site_name": "Test",
@@ -108,9 +108,9 @@ async def test_real_multicast_ws_discovery_finds_rehearsal_camera():
     """Phase 2 — chemin réel (aucun réseau simulé) : la sonde part en multicast
     239.255.255.250:3702 et une caméra virtuelle inscrite sur le groupe répond.
     Valide le transport multicast réel sur la machine, sans matériel."""
-    from ipcam_provisioner.simulation import demo
-    from ipcam_provisioner.simulation.camera import CameraSpec
-    from ipcam_provisioner.simulation.network import SimulatedNetwork
+    from camnetpilot.simulation import demo
+    from camnetpilot.simulation.camera import CameraSpec
+    from camnetpilot.simulation.network import SimulatedNetwork
 
     cfg = demo.demo_config()
     cfg.discovery.methods = [DiscoveryMethod.ONVIF_WS_DISCOVERY]
@@ -151,9 +151,9 @@ async def test_real_multicast_ws_discovery_finds_rehearsal_camera():
 async def test_real_broadcast_protocol_finds_rehearsal_camera(method, vendor, mac, ip):
     """Phase 2 — chemin réel en broadcast (255.255.255.255) sur le port du protocole :
     la caméra virtuelle inscrite sur le port répond à la sonde réelle."""
-    from ipcam_provisioner.simulation import demo
-    from ipcam_provisioner.simulation.camera import CameraSpec
-    from ipcam_provisioner.simulation.network import SimulatedNetwork
+    from camnetpilot.simulation import demo
+    from camnetpilot.simulation.camera import CameraSpec
+    from camnetpilot.simulation.network import SimulatedNetwork
 
     cfg = demo.demo_config()
     cfg.discovery.methods = [method]
@@ -193,3 +193,4 @@ def test_parse_arp_a_windows():
     )
     assert ("192.168.1.1", "ac:cc:8e:11:22:33") in _parse_arp_a(text)
     assert ("192.168.1.64", "e0:50:8b:44:55:66") in _parse_arp_a(text)
+
